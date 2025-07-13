@@ -8,8 +8,8 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { getFirestore, collection, addDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 
 // Firebase configuration - Replace with your actual config
 const firebaseConfig = {
@@ -69,6 +69,127 @@ export const signOutUser = async () => {
 
 export const onAuthStateChange = (callback) => {
   return onAuthStateChanged(auth, callback);
+};
+
+// Storage functions
+export const uploadFile = async (file, path, metadata = {}) => {
+  try {
+    const storageRef = ref(storage, path);
+    const snapshot = await uploadBytes(storageRef, file, metadata);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    return { url: downloadURL, error: null };
+  } catch (error) {
+    return { url: null, error: error.message };
+  }
+};
+
+export const uploadInspectionReport = async (file, userId, inspectionId) => {
+  const path = `inspections/${inspectionId}/reports/${file.name}`;
+  const metadata = {
+    contentType: file.type,
+    customMetadata: {
+      userId: userId,
+      inspectionId: inspectionId,
+      uploadedAt: new Date().toISOString()
+    }
+  };
+  return await uploadFile(file, path, metadata);
+};
+
+export const uploadVoiceNote = async (audioBlob, userId, inspectionId, noteId) => {
+  const path = `inspections/${inspectionId}/voice-notes/${noteId}.webm`;
+  const metadata = {
+    contentType: 'audio/webm',
+    customMetadata: {
+      userId: userId,
+      inspectionId: inspectionId,
+      noteId: noteId,
+      uploadedAt: new Date().toISOString()
+    }
+  };
+  return await uploadFile(audioBlob, path, metadata);
+};
+
+export const uploadPhoto = async (file, userId, inspectionId, photoId) => {
+  const path = `inspections/${inspectionId}/photos/${photoId}_${file.name}`;
+  const metadata = {
+    contentType: file.type,
+    customMetadata: {
+      userId: userId,
+      inspectionId: inspectionId,
+      photoId: photoId,
+      uploadedAt: new Date().toISOString()
+    }
+  };
+  return await uploadFile(file, path, metadata);
+};
+
+export const getInspectionFiles = async (inspectionId) => {
+  try {
+    const inspectionRef = ref(storage, `inspections/${inspectionId}`);
+    const result = await listAll(inspectionRef);
+    
+    const files = [];
+    for (const itemRef of result.items) {
+      const url = await getDownloadURL(itemRef);
+      files.push({
+        name: itemRef.name,
+        url: url,
+        path: itemRef.fullPath
+      });
+    }
+    
+    return { files, error: null };
+  } catch (error) {
+    return { files: [], error: error.message };
+  }
+};
+
+export const deleteFile = async (filePath) => {
+  try {
+    const fileRef = ref(storage, filePath);
+    await deleteObject(fileRef);
+    return { error: null };
+  } catch (error) {
+    return { error: error.message };
+  }
+};
+
+// Firestore functions for inspection data
+export const createInspection = async (inspectionData) => {
+  try {
+    const docRef = await addDoc(collection(db, 'inspections'), {
+      ...inspectionData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { id: docRef.id, error: null };
+  } catch (error) {
+    return { id: null, error: error.message };
+  }
+};
+
+export const getUserInspections = async (userId) => {
+  try {
+    const q = query(
+      collection(db, 'inspections'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    
+    const inspections = [];
+    querySnapshot.forEach((doc) => {
+      inspections.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    return { inspections, error: null };
+  } catch (error) {
+    return { inspections: [], error: error.message };
+  }
 };
 
 export default app; 

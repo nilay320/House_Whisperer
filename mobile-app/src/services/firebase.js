@@ -10,53 +10,25 @@ import {
 } from 'firebase/auth';
 import { getFirestore, collection, addDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
+import Constants from 'expo-constants';
 
-// Validate Firebase configuration
-const validateFirebaseConfig = () => {
-  const requiredVars = [
-    'REACT_APP_FIREBASE_API_KEY',
-    'REACT_APP_FIREBASE_AUTH_DOMAIN',
-    'REACT_APP_FIREBASE_PROJECT_ID',
-    'REACT_APP_FIREBASE_STORAGE_BUCKET',
-    'REACT_APP_FIREBASE_MESSAGING_SENDER_ID',
-    'REACT_APP_FIREBASE_APP_ID'
-  ];
-
-  const missingVars = requiredVars.filter(varName => !process.env[varName]);
-  
-  if (missingVars.length > 0) {
-    console.error('Missing Firebase environment variables:', missingVars);
-    throw new Error(`Missing Firebase configuration: ${missingVars.join(', ')}`);
-  }
-};
-
-// Firebase configuration from environment variables
+// Get Firebase config from expo-constants
 const getFirebaseConfig = () => {
-  validateFirebaseConfig();
+  const extra = Constants.expoConfig?.extra;
   
   return {
-    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.REACT_APP_FIREBASE_APP_ID
+    apiKey: extra?.firebaseApiKey,
+    authDomain: extra?.firebaseAuthDomain,
+    projectId: extra?.firebaseProjectId,
+    storageBucket: extra?.firebaseStorageBucket,
+    messagingSenderId: extra?.firebaseMessagingSenderId,
+    appId: extra?.firebaseAppId
   };
 };
 
-// Initialize Firebase with error handling
-let app;
-try {
-  const firebaseConfig = getFirebaseConfig();
-  app = initializeApp(firebaseConfig);
-  console.log('✅ Firebase initialized successfully');
-} catch (error) {
-  console.error('❌ Firebase initialization failed:', error.message);
-  // In production, you might want to show a user-friendly error
-  if (process.env.NODE_ENV === 'production') {
-    console.error('Firebase configuration error in production');
-  }
-}
+// Initialize Firebase
+const firebaseConfig = getFirebaseConfig();
+const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase services
 export const auth = getAuth(app);

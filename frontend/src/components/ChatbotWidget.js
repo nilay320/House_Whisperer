@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Upload, X, MessageCircle, FileText, User, Bot } from 'lucide-react';
+import { Send, X, MessageCircle, FileText, User, Bot } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 
 const ChatbotWidget = () => {

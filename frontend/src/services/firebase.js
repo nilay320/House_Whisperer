@@ -8,56 +8,20 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, where, orderBy, setDoc, getDoc, doc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 
-// Validate Firebase configuration
-const validateFirebaseConfig = () => {
-  const requiredVars = [
-    'REACT_APP_FIREBASE_API_KEY',
-    'REACT_APP_FIREBASE_AUTH_DOMAIN',
-    'REACT_APP_FIREBASE_PROJECT_ID',
-    'REACT_APP_FIREBASE_STORAGE_BUCKET',
-    'REACT_APP_FIREBASE_MESSAGING_SENDER_ID',
-    'REACT_APP_FIREBASE_APP_ID'
-  ];
-
-  const missingVars = requiredVars.filter(varName => !process.env[varName]);
-  
-  if (missingVars.length > 0) {
-    console.error('Missing Firebase environment variables:', missingVars);
-    // Don't throw error during build, just log warning
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Firebase configuration incomplete. Some features may not work.');
-    }
-    return false;
-  }
-  return true;
-};
-
-// Firebase configuration from environment variables
+// Firebase configuration - USING HARDCODED VALUES FOR DEBUGGING
 const getFirebaseConfig = () => {
-  const isValid = validateFirebaseConfig();
-  
-  if (!isValid) {
-    // Return a default config to prevent build failures
-    return {
-      apiKey: "placeholder",
-      authDomain: "placeholder",
-      projectId: "placeholder",
-      storageBucket: "placeholder",
-      messagingSenderId: "placeholder",
-      appId: "placeholder"
-    };
-  }
+  console.log('🔧 Using hardcoded Firebase config for debugging');
   
   return {
-    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.REACT_APP_FIREBASE_APP_ID
+    apiKey: "AIzaSyDWdJXTqiaaGMSnAwNS5h1aRslhez48rvQ",
+    authDomain: "house-whisperer-2025.firebaseapp.com",
+    projectId: "house-whisperer-2025",
+    storageBucket: "house-whisperer-2025.firebasestorage.app",
+    messagingSenderId: "322379778305",
+    appId: "1:322379778305:web:5e9c62ce6c056d7bd6f300"
   };
 };
 
@@ -90,9 +54,12 @@ export const signInWithEmail = async (email, password) => {
   }
 };
 
-export const signUpWithEmail = async (email, password) => {
+export const signUpWithEmail = async (email, password, role) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    // Add role to the user's document in Firestore
+    const userRef = doc(db, 'users', userCredential.user.uid);
+    await setDoc(userRef, { role: role });
     return { user: userCredential.user, error: null };
   } catch (error) {
     return { user: null, error: error.message };
@@ -240,6 +207,20 @@ export const getUserInspections = async (userId) => {
     return { inspections, error: null };
   } catch (error) {
     return { inspections: [], error: error.message };
+  }
+};
+
+export const getUserRole = async (userId) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const docSnap = await getDoc(userRef);
+    if (docSnap.exists()) {
+      return { role: docSnap.data().role, error: null };
+    } else {
+      return { role: null, error: 'User not found' };
+    }
+  } catch (error) {
+    return { role: null, error: error.message };
   }
 };
 

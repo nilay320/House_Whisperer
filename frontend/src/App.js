@@ -8,6 +8,7 @@ import InspectorCapture from './components/InspectorCapture';
 import { Home, Camera, MessageCircle, LogOut } from 'lucide-react';
 import { signOutUser } from './services/firebase';
 import toast from 'react-hot-toast';
+import { getUserRole } from './services/firebase';
 
 // Navigation Component
 const Navigation = ({ user }) => {
@@ -275,17 +276,26 @@ const InspectorPage = () => {
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState(null);
+  const [roleLoading, setRoleLoading] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChange((user) => {
+    const unsubscribe = onAuthStateChange(async (user) => {
       setUser(user);
       setLoading(false);
+      if (user) {
+        setRoleLoading(true);
+        const { role: userRole } = await getUserRole(user.uid);
+        setRole(userRole);
+        setRoleLoading(false);
+      } else {
+        setRole(null);
+      }
     });
-
     return () => unsubscribe();
   }, []);
 
-  if (loading) {
+  if (loading || roleLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -295,6 +305,19 @@ function App() {
       </div>
     );
   }
+
+  // Buyer Dashboard placeholder
+  const BuyerDashboard = () => (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">Welcome, Buyer!</h1>
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold mb-4">Ask questions about your inspection report below.</h2>
+          <p className="text-gray-600 mb-4">Use the chat widget in the bottom-right to get plain-English explanations and recommendations.</p>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <Router>
@@ -310,26 +333,31 @@ function App() {
           }}
         />
         
-        {user && <Navigation user={user} />}
+        {user && role === 'inspector' && <Navigation user={user} />}
         
         <Routes>
           <Route
             path="/"
-            element={user ? <Navigate to="/dashboard" /> : <AuthScreen />}
+            element={user ? (role === 'inspector' ? <Navigate to="/dashboard" /> : <Navigate to="/buyer" />) : <AuthScreen />}
           />
           <Route
             path="/dashboard"
-            element={user ? <Dashboard /> : <Navigate to="/" />}
+            element={user && role === 'inspector' ? <Dashboard /> : <Navigate to="/" />}
           />
           <Route
             path="/inspector"
-            element={user ? <InspectorPage /> : <Navigate to="/" />}
+            element={user && role === 'inspector' ? <InspectorPage /> : <Navigate to="/" />}
+          />
+          <Route
+            path="/buyer"
+            element={user && role === 'buyer' ? <BuyerDashboard /> : <Navigate to="/" />}
           />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
 
-        {/* Chatbot Widget - Always available for testing */}
-        {user && <ChatbotWidget />}
+        {/* Chatbot Widget - Only for buyers */}
+        {user && role === 'buyer' && <ChatbotWidget />}
+        {/* Inspector features only for inspectors */}
       </div>
     </Router>
   );

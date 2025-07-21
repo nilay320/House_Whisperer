@@ -8,15 +8,27 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, where, orderBy, setDoc, getDoc, doc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import Constants from 'expo-constants';
+
+// Validate Firebase configuration
+const validateFirebaseConfig = (config) => {
+  const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
+  const missingKeys = requiredKeys.filter(key => !config[key]);
+  
+  if (missingKeys.length > 0) {
+    console.error('Missing Firebase configuration keys:', missingKeys);
+    return false;
+  }
+  return true;
+};
 
 // Get Firebase config from expo-constants
 const getFirebaseConfig = () => {
   const extra = Constants.expoConfig?.extra;
   
-  return {
+  const config = {
     apiKey: extra?.firebaseApiKey,
     authDomain: extra?.firebaseAuthDomain,
     projectId: extra?.firebaseProjectId,
@@ -24,6 +36,21 @@ const getFirebaseConfig = () => {
     messagingSenderId: extra?.firebaseMessagingSenderId,
     appId: extra?.firebaseAppId
   };
+
+  if (!validateFirebaseConfig(config)) {
+    // Return placeholder config to prevent crashes during development
+    console.warn('Firebase configuration incomplete. Some features may not work.');
+    return {
+      apiKey: "placeholder",
+      authDomain: "placeholder",
+      projectId: "placeholder",
+      storageBucket: "placeholder",
+      messagingSenderId: "placeholder",
+      appId: "placeholder"
+    };
+  }
+
+  return config;
 };
 
 // Initialize Firebase
@@ -45,9 +72,12 @@ export const signInWithEmail = async (email, password) => {
   }
 };
 
-export const signUpWithEmail = async (email, password) => {
+export const signUpWithEmail = async (email, password, role) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    // Add role to the user's document in Firestore
+    const userRef = doc(db, 'users', userCredential.user.uid);
+    await setDoc(userRef, { role: role });
     return { user: userCredential.user, error: null };
   } catch (error) {
     return { user: null, error: error.message };
@@ -195,6 +225,20 @@ export const getUserInspections = async (userId) => {
     return { inspections, error: null };
   } catch (error) {
     return { inspections: [], error: error.message };
+  }
+};
+
+export const getUserRole = async (userId) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const docSnap = await getDoc(userRef);
+    if (docSnap.exists()) {
+      return { role: docSnap.data().role, error: null };
+    } else {
+      return { role: null, error: 'User not found' };
+    }
+  } catch (error) {
+    return { role: null, error: error.message };
   }
 };
 

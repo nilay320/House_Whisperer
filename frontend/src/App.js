@@ -306,6 +306,11 @@ function App() {
     );
   }
 
+  // If user is logged in but has no role, show AuthScreen (role selector)
+  if (user && !role) {
+    return <AuthScreen />;
+  }
+
   // Buyer Dashboard placeholder
   const BuyerDashboard = () => (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -338,7 +343,14 @@ function App() {
         <Routes>
           <Route
             path="/"
-            element={user ? (role === 'inspector' ? <Navigate to="/dashboard" /> : <Navigate to="/buyer" />) : <AuthScreen />}
+            element={user
+              ? (role === 'inspector'
+                  ? <Navigate to="/dashboard" />
+                  : role === 'buyer'
+                    ? <Navigate to="/buyer" />
+                    : null // Don't navigate if role is missing!
+                )
+              : <AuthScreen />}
           />
           <Route
             path="/dashboard"

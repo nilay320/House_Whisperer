@@ -27,20 +27,50 @@ const ChatbotWidget = () => {
     scrollToBottom();
   }, [messages]);
 
+  const uploadPdfToBackend = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload_pdf', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('PDF upload error:', error);
+      throw error;
+    }
+  };
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
       'application/pdf': ['.pdf'],
     },
     maxFiles: 1,
-    onDrop: (acceptedFiles) => {
+    onDrop: async (acceptedFiles) => {
       const file = acceptedFiles[0];
       if (file) {
         setUploadedPdf(file);
         addMessage('user', `Uploaded PDF: ${file.name}`);
-        // Simulate AI processing the PDF
-        setTimeout(() => {
-          addMessage('bot', 'I\'ve analyzed your inspection report. I can now answer questions about specific findings, provide maintenance recommendations, and help you understand any issues that were identified. What would you like to know?');
-        }, 2000);
+        setIsLoading(true);
+        
+        try {
+          // Upload and process the PDF
+          const result = await uploadPdfToBackend(file);
+          addMessage('bot', `✅ Successfully processed your inspection report "${file.name}". I can now answer specific questions about your property's findings, provide maintenance recommendations, and help you understand any issues that were identified. What would you like to know?`);
+        } catch (error) {
+          addMessage('bot', `❌ Sorry, I had trouble processing your PDF. Please make sure the backend API is running and try uploading again. Error: ${error.message}`);
+          setUploadedPdf(null); // Clear the uploaded file on error
+        } finally {
+          setIsLoading(false);
+        }
       }
     },
   });
@@ -63,20 +93,85 @@ const ChatbotWidget = () => {
     addMessage('user', userMessage);
     setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responses = [
-        'Based on the inspection report, I can see that the roof shows signs of aging with some missing shingles. I recommend having a professional roofer assess the damage and consider replacement within the next 2-3 years.',
-        'The electrical system appears to be up to code, but I noticed some outlets that could benefit from GFCI protection, especially in the kitchen and bathroom areas.',
-        'The HVAC system is 15 years old and showing signs of wear. While it\'s still functional, I\'d recommend budgeting for replacement within the next 2 years for better efficiency.',
-        'The foundation appears solid with no visible cracks or settling issues. This is a positive finding for the structural integrity of the property.',
-        'I can help you understand any specific section of your inspection report. Which area would you like me to explain in more detail?',
-      ];
+    try {
+      if (uploadedPdf) {
+        // Use PDF chat endpoint for document-specific questions
+        const response = await fetch('/api/pdf_chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            question: userMessage,
+            pdf_filename: uploadedPdf.name,
+            model: 'gpt-4o-mini'
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // PDF chat returns JSON
+        const data = await response.json();
+        addMessage('bot', data.answer);
+      } else {
+        // Use general chat endpoint for general home inspection questions
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            developer_message: 'You are a helpful home inspection AI assistant. Provide clear, practical advice about home inspection reports, property maintenance, and real estate concerns. Keep responses concise and actionable.',
+            user_message: userMessage,
+            model: 'gpt-4o-mini'
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // General chat returns streaming text
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let botMessage = '';
+
+        // Add empty bot message to start streaming
+        const botMessageId = Date.now();
+        const initialBotMessage = {
+          id: botMessageId,
+          type: 'bot',
+          content: '',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, initialBotMessage]);
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          botMessage += chunk;
+          
+          // Update the last message (bot's response) with streaming content
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === botMessageId 
+                ? { ...msg, content: botMessage }
+                : msg
+            )
+          );
+        }
+      }
       
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-      addMessage('bot', randomResponse);
+    } catch (error) {
+      console.error('Chat error:', error);
+      addMessage('bot', 'Sorry, I encountered an error processing your request. Please make sure the backend API is running and try again.');
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const handleKeyPress = (e) => {

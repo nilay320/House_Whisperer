@@ -11,18 +11,36 @@ import {
 import { getFirestore, collection, addDoc, getDocs, query, where, orderBy, setDoc, getDoc, doc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 
-// Firebase configuration - USING HARDCODED VALUES FOR DEBUGGING
+// Firebase configuration using environment variables
 const getFirebaseConfig = () => {
-  console.log('🔧 Using hardcoded Firebase config for debugging');
-  
-  return {
-    apiKey: "AIzaSyDWdJXTqiaaGMSnAwNS5h1aRslhez48rvQ",
-    authDomain: "house-whisperer-2025.firebaseapp.com",
-    projectId: "house-whisperer-2025",
-    storageBucket: "house-whisperer-2025.firebasestorage.app",
-    messagingSenderId: "322379778305",
-    appId: "1:322379778305:web:5e9c62ce6c056d7bd6f300"
+  const config = {
+    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.REACT_APP_FIREBASE_APP_ID
   };
+
+  // Validate required environment variables
+  const requiredVars = [
+    'REACT_APP_FIREBASE_API_KEY',
+    'REACT_APP_FIREBASE_AUTH_DOMAIN', 
+    'REACT_APP_FIREBASE_PROJECT_ID',
+    'REACT_APP_FIREBASE_STORAGE_BUCKET',
+    'REACT_APP_FIREBASE_MESSAGING_SENDER_ID',
+    'REACT_APP_FIREBASE_APP_ID'
+  ];
+
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+  
+  if (missingVars.length > 0) {
+    console.error('❌ Missing Firebase environment variables:', missingVars);
+    throw new Error(`Missing Firebase configuration: ${missingVars.join(', ')}`);
+  }
+
+  console.log('✅ Firebase config loaded from environment variables');
+  return config;
 };
 
 // Initialize Firebase with error handling

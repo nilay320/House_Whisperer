@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Mic, MicOff, Upload, FileText, Trash2, Play, Pause } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
 
@@ -13,7 +13,6 @@ const InspectorCapture = ({ onGenerateReport }) => {
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
-  const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
   // Check if device supports media recording

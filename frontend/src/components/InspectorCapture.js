@@ -22,7 +22,7 @@ const InspectorCapture = ({ onGenerateReport }) => {
     setHasMediaSupport(
       navigator.mediaDevices && 
       navigator.mediaDevices.getUserMedia && 
-      window.MediaRecorder
+      !!window.MediaRecorder
     );
   }, []);
 

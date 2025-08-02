@@ -10,14 +10,26 @@ import os
 from typing import Optional
 import shutil
 import sys
+from dotenv import load_dotenv
 
-# Add the parent directory to the path to import aimakerspace
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+# Load environment variables from .env.local (for local development)
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', 'frontend', '.env.local'))
 
-# Import aimakerspace components for PDF processing and RAG
-from aimakerspace.text_utils import PDFLoader, CharacterTextSplitter
-from aimakerspace.vectordatabase import VectorDatabase
-from aimakerspace.openai_utils.chatmodel import ChatOpenAI
+# Standard imports for PDF processing and text handling
+import PyPDF2
+from io import BytesIO
+
+# Import our LangGraph RAG system
+try:
+    from langgraph_inspector_rag import query_inspector_rag
+    LANGGRAPH_AVAILABLE = True
+    print("✅ LangGraph Inspector RAG system loaded successfully")
+except ImportError as e:
+    LANGGRAPH_AVAILABLE = False
+    print(f"❌ Warning: LangGraph Inspector RAG not available: {e}")
+
+# Standard imports for JSON handling
+import json
 
 # Initialize FastAPI application with a title
 app = FastAPI(title="OpenAI Chat API")
@@ -28,7 +40,11 @@ if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY environment variable is not set")
 
 # Get allowed origins from environment variable or use defaults
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+# Include Vercel preview URLs and production URL
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://*.vercel.app").split(",")
+# Add the actual production URL when known
+if os.getenv("VERCEL_URL"):
+    ALLOWED_ORIGINS.append(f"https://{os.getenv('VERCEL_URL')}")
 
 # Configure CORS (Cross-Origin Resource Sharing) middleware
 # This allows the API to be accessed from different domains/origins
@@ -61,9 +77,132 @@ class PDFChatRequest(BaseModel):
     pdf_filename: str
     model: Optional[str] = "gpt-4o-mini"
 
-# Define the main chat endpoint that handles POST requests
+# Define the data model for RAG chat requests (Inspector standards)
+class RAGChatRequest(BaseModel):
+    message: str
+    sessionId: Optional[str] = "default"
+
+# Define the main chat endpoint for LangGraph RAG (Inspector standards) with SSE streaming
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+async def rag_chat(request: RAGChatRequest):
+    try:
+        print(f"📧 Received chat request: {request.message}")
+        
+        if not LANGGRAPH_AVAILABLE:
+            # Simple fallback response for testing
+            return {
+                "answer": f"Hello! You asked: '{request.message}'. The LangGraph RAG system is temporarily unavailable, but I'm here to help with home inspection questions. The backend API is working correctly!",
+                "status": "success"
+            }
+        
+        # Import here to avoid circular imports
+        from langgraph_inspector_rag import query_inspector_rag_streaming
+        
+        async def generate_stream():
+            """Generate SSE stream with progress updates."""
+            import time
+            start_time = time.time()
+            
+            try:
+                # Send initial status with timestamp
+                initial_data = {
+                    "status": "starting", 
+                    "message": "Initializing AI agents...", 
+                    "timestamp": start_time
+                }
+                yield f"data: {json.dumps(initial_data)}\n\n"
+                
+                # Query the streaming LangGraph RAG system
+                async for update in query_inspector_rag_streaming(request.message, request.sessionId):
+                    if update.get("type") == "progress":
+                        # Send progress update with elapsed time
+                        elapsed = time.time() - start_time
+                        progress_data = {
+                            "status": "progress", 
+                            "message": update.get("message", ""),
+                            "elapsed_seconds": round(elapsed, 2)
+                        }
+                        yield f"data: {json.dumps(progress_data)}\n\n"
+                    elif update.get("type") == "complete":
+                        # Send final result via multiple SSE messages to handle large responses
+                        total_time = time.time() - start_time
+                        response_text = update.get("response", "No response generated")
+                        sources = update.get("sources", [])
+                        
+                        print(f"📤 Streaming complete response ({len(response_text)} chars)")
+                        
+                        # Send response metadata first
+                        metadata = {
+                            "status": "response_start",
+                            "total_time_seconds": round(total_time, 2),
+                            "response_length": len(response_text),
+                            "sources_count": len(sources)
+                        }
+                        yield f"data: {json.dumps(metadata)}\n\n"
+                        
+                        # Stream response content in chunks
+                        chunk_size = 1000  # Reasonable chunk size for SSE
+                        for i in range(0, len(response_text), chunk_size):
+                            chunk = response_text[i:i + chunk_size]
+                            chunk_data = {
+                                "status": "response_chunk",
+                                "chunk": chunk,
+                                "chunk_index": i // chunk_size,
+                                "is_final_chunk": (i + chunk_size) >= len(response_text)
+                            }
+                            yield f"data: {json.dumps(chunk_data)}\n\n"
+                        
+                        # Send sources separately
+                        sources_data = {
+                            "status": "sources",
+                            "sources": sources
+                        }
+                        yield f"data: {json.dumps(sources_data)}\n\n"
+                        
+                        # Send completion signal
+                        complete_data = {
+                            "status": "complete",
+                            "total_time_seconds": round(total_time, 2)
+                        }
+                        yield f"data: {json.dumps(complete_data)}\n\n"
+                        break
+                    elif update.get("type") == "error":
+                        # Send error
+                        error_data = {
+                            "status": "error", 
+                            "message": update.get("message", "Unknown error")
+                        }
+                        yield f"data: {json.dumps(error_data)}\n\n"
+                        break
+                        
+            except Exception as e:
+                # Send error response
+                error_data = {
+                    "status": "error",
+                    "message": f"RAG query failed: {str(e)}"
+                }
+                yield f"data: {json.dumps(error_data)}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream"
+            }
+        )
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"❌ RAG query error: {str(e)}")
+        print(f"❌ Full traceback: {error_details}")
+        raise HTTPException(status_code=500, detail=f"RAG query failed: {str(e)}")
+
+# Define the legacy chat endpoint that handles POST requests
+@app.post("/api/legacy_chat")
+async def legacy_chat(request: ChatRequest):
     try:
         # Initialize OpenAI client with the environment variable API key
         client = OpenAI(api_key=OPENAI_API_KEY)
@@ -124,63 +263,49 @@ async def upload_pdf(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
 
+def extract_text_from_pdf(file_path: str) -> str:
+    """Extract text from PDF using PyPDF2."""
+    try:
+        with open(file_path, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() + "\n"
+        return text.strip()
+    except Exception as e:
+        print(f"Error extracting text from PDF: {str(e)}")
+        raise e
+
+def simple_chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> list:
+    """Simple text chunking function."""
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end]
+        chunks.append(chunk.strip())
+        start = end - overlap
+    return [chunk for chunk in chunks if chunk]
+
 async def index_pdf(file_path: str, filename: str):
     """
-    Index a PDF file using aimakerspace components with improved chunking for large documents.
+    Index a PDF file using simple text extraction and chunking.
+    Note: This is a simplified version for demonstration.
+    In production, you'd want to use the LangGraph RAG system for vectorization.
     """
     try:
-        # Load PDF content using aimakerspace PDFLoader
-        pdf_loader = PDFLoader(file_path)
-        documents = pdf_loader.load_documents()
+        # Extract text from PDF
+        text = extract_text_from_pdf(file_path)
         
-        # Use smaller chunk size for large documents to avoid token limits
-        # For large PDFs, we'll use smaller chunks and process in batches
-        text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-        chunks = text_splitter.split_texts(documents)
+        # Create simple chunks
+        chunks = simple_chunk_text(text, chunk_size=500, chunk_overlap=100)
         
         print(f"Created {len(chunks)} chunks from PDF: {filename}")
         
-        # Create vector database and build embeddings in batches
-        vector_db = VectorDatabase()
-        
-        # Process embeddings in batches to avoid token limits
-        batch_size = 50  # Process 50 chunks at a time
-        total_chunks = len(chunks)
-        
-        for i in range(0, total_chunks, batch_size):
-            batch_chunks = chunks[i:i + batch_size]
-            print(f"Processing batch {i//batch_size + 1}/{(total_chunks + batch_size - 1)//batch_size} ({len(batch_chunks)} chunks)")
-            
-            try:
-                await vector_db.abuild_from_list(batch_chunks)
-                print(f"✅ Successfully processed batch {i//batch_size + 1}")
-            except Exception as batch_error:
-                print(f"❌ Error processing batch {i//batch_size + 1}: {str(batch_error)}")
-                # If batch fails, try with even smaller chunks
-                if "max_tokens_per_request" in str(batch_error):
-                    print("Token limit exceeded, trying with smaller chunks...")
-                    # Split the problematic batch into even smaller chunks
-                    smaller_splitter = CharacterTextSplitter(chunk_size=250, chunk_overlap=50)
-                    smaller_chunks = smaller_splitter.split_texts(batch_chunks)
-                    
-                    # Process these smaller chunks one by one
-                    for j, small_chunk in enumerate(smaller_chunks):
-                        try:
-                            await vector_db.abuild_from_list([small_chunk])
-                            print(f"  ✅ Processed sub-chunk {j+1}/{len(smaller_chunks)}")
-                        except Exception as sub_error:
-                            print(f"  ❌ Failed to process sub-chunk {j+1}: {str(sub_error)}")
-                            # Skip this chunk if it still fails
-                            continue
-                else:
-                    # For other errors, skip this batch
-                    print(f"Skipping batch due to error: {str(batch_error)}")
-                    continue
-        
-        # Store the vector database for this PDF (ephemeral, in-memory only)
+        # Store chunks in memory (simplified storage)
         pdf_vector_dbs[filename] = {
-            'vector_db': vector_db,
-            'chunks': chunks
+            'chunks': chunks,
+            'text': text
         }
         
         print(f"Successfully indexed PDF: {filename} with {len(chunks)} chunks")
@@ -203,15 +328,22 @@ async def pdf_chat(request: PDFChatRequest):
             )
         
         pdf_data = pdf_vector_dbs[request.pdf_filename]
-        vector_db = pdf_data['vector_db']
         chunks = pdf_data['chunks']
         
-        # Retrieve relevant chunks using vector similarity search
-        relevant_chunks = vector_db.search_by_text(
-            request.question, 
-            k=3, 
-            return_as_text=True
-        )
+        # Simple keyword search for relevant chunks (simplified approach)
+        question_words = request.question.lower().split()
+        relevant_chunks = []
+        
+        for chunk in chunks:
+            chunk_lower = chunk.lower()
+            if any(word in chunk_lower for word in question_words):
+                relevant_chunks.append(chunk)
+                if len(relevant_chunks) >= 3:
+                    break
+        
+        # If no relevant chunks found, use first few chunks
+        if not relevant_chunks:
+            relevant_chunks = chunks[:3]
         
         # Combine relevant chunks into context
         context = "\n\n".join(relevant_chunks)
@@ -226,14 +358,17 @@ Question: {request.question}
 
 Please answer the question based on the context provided. If the context doesn't contain enough information to answer the question, say so. Keep your answer concise and relevant."""
 
-        # Initialize chat model and get response
-        chat_model = ChatOpenAI(model_name=request.model)
-        response = chat_model.run([
-            {"role": "user", "content": rag_prompt}
-        ])
+        # Use OpenAI directly instead of aimakerspace wrapper
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=request.model,
+            messages=[
+                {"role": "user", "content": rag_prompt}
+            ]
+        )
         
         return {
-            "answer": response,
+            "answer": response.choices[0].message.content,
             "pdf_filename": request.pdf_filename,
             "relevant_chunks_used": len(relevant_chunks)
         }

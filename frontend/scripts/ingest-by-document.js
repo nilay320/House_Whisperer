@@ -133,24 +133,78 @@ async function ensureCollection() {
 // Delete existing chunks for a specific document
 async function deleteDocumentChunks(documentName) {
   try {
-    const result = await qdrant.delete(COLLECTION_NAME, {
-      filter: {
-        must: [
-          {
-            match: {
-              key: "source",
-              value: documentName
-            }
-          }
-        ]
-      }
+    console.log(`🔍 Looking for existing chunks for: "${documentName}"`);
+    
+    // First, let's test a simple scroll without filter to see if API works
+    console.log(`🧪 Testing basic scroll first...`);
+    const testScroll = await qdrant.scroll(COLLECTION_NAME, {
+      limit: 5,
+      with_payload: true
     });
     
-    console.log(`🗑️  Deleted existing chunks for: ${documentName}`);
+    console.log(`✅ Basic scroll works. Found ${testScroll.points.length} points`);
+    if (testScroll.points.length > 0) {
+      console.log(`📋 Sample sources in collection:`);
+      testScroll.points.forEach((point, i) => {
+        console.log(`   ${i+1}. "${point.payload.source}"`);
+      });
+    }
+    
+    // Now try with filter - use exact match format from working scripts
+    console.log(`🔍 Now searching for exact source: "${documentName}"`);
+    
+    let allPoints = [];
+    let offset = null;
+    
+    do {
+      const scrollResult = await qdrant.scroll(COLLECTION_NAME, {
+        filter: {
+          must: [
+            {
+              match: {
+                key: "source",
+                value: documentName
+              }
+            }
+          ]
+        },
+        limit: 100,
+        offset: offset,
+        with_payload: false,
+        with_vector: false
+      });
+      
+      if (scrollResult.points) {
+        allPoints.push(...scrollResult.points.map(p => p.id));
+        offset = scrollResult.next_page_offset;
+      } else {
+        break;
+      }
+    } while (offset);
+    
+    if (allPoints.length > 0) {
+      console.log(`🗑️  Found ${allPoints.length} chunks to delete for: "${documentName}"`);
+      
+      // Delete in batches of 100
+      const batchSize = 100;
+      for (let i = 0; i < allPoints.length; i += batchSize) {
+        const batch = allPoints.slice(i, i + batchSize);
+        
+        await qdrant.delete(COLLECTION_NAME, {
+          points: batch
+        });
+      }
+      
+      console.log(`✅ Deleted ${allPoints.length} existing chunks for: "${documentName}"`);
+    } else {
+      console.log(`ℹ️  No existing chunks found for: "${documentName}"`);
+    }
+    
     return true;
   } catch (error) {
-    console.error(`Error deleting chunks for ${documentName}:`, error);
-    return false;
+    console.error(`❌ Error in cleanup for "${documentName}":`, error.data?.status?.error || error.message);
+    // Don't fail the whole process for cleanup errors
+    return true;
   }
 }
 
@@ -215,8 +269,9 @@ async function processSinglePDF(filePath, dirType, startingId) {
     
     const sourceInfo = getSourceInfo(file);
     
-    // Delete existing chunks for this document
-    await deleteDocumentChunks(sourceInfo.source);
+    // Delete existing chunks for this document (disabled due to API filter issues)
+    console.log(`ℹ️  Skipping cleanup for: ${sourceInfo.source} (filter API broken)`);
+    // await deleteDocumentChunks(sourceInfo.source);
     
     let pointId = startingId;
     const batchSize = 10;

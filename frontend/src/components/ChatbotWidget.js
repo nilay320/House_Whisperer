@@ -86,11 +86,14 @@ const ChatbotWidget = () => {
   };
 
   const handleSendMessage = async () => {
+    console.log('handleSendMessage called');
     if (!inputValue.trim()) return;
 
     const userMessage = inputValue.trim();
+    console.log('User message:', userMessage);
     setInputValue('');
     addMessage('user', userMessage);
+    console.log('User message added to chat');
     setIsLoading(true);
 
     try {
@@ -116,11 +119,17 @@ const ChatbotWidget = () => {
         const data = await response.json();
         addMessage('bot', data.answer);
       } else {
-        // Use RAG chat endpoint for inspector questions
-        const response = await fetch('/api/chat', {
+        // Use RAG chat endpoint for inspector questions with SSE streaming
+        console.log('Starting RAG chat request with SSE...');
+        const apiUrl = process.env.REACT_APP_API_URL || '';
+        console.log('API URL:', apiUrl);
+        console.log('Sending message:', userMessage);
+        
+        const response = await fetch(`${apiUrl}/api/chat`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
           },
           body: JSON.stringify({
             message: userMessage,
@@ -128,68 +137,129 @@ const ChatbotWidget = () => {
           }),
         });
         
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+        
         if (!response.ok) {
+          console.error('Response not ok:', response.status, response.statusText);
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // RAG chat returns SSE stream
+        // Handle SSE streaming response
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let botMessage = '';
-        let sources = [];
-
-        // Add empty bot message to start streaming
-        const botMessageId = Date.now();
-        const initialBotMessage = {
-          id: botMessageId,
+        let buffer = '';
+        let currentBotMessageId = null;
+        const requestStartTime = Date.now();
+        let accumulatedResponse = '';
+        let responseSources = [];
+        
+        // Add initial bot message for streaming updates
+        const botMessage = {
+          id: Date.now(),
           type: 'bot',
-          content: '',
+          content: '🤖 Starting analysis...',
           timestamp: new Date(),
         };
-        setMessages(prev => [...prev, initialBotMessage]);
+        currentBotMessageId = botMessage.id;
+        setMessages(prev => [...prev, botMessage]);
         
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-          
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.content) {
-                  botMessage += data.content;
-                  // Update the last message with streaming content
-                  setMessages(prev => 
-                    prev.map(msg => 
-                      msg.id === botMessageId 
-                        ? { ...msg, content: botMessage }
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // Keep incomplete line in buffer
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const jsonStr = line.slice(6);
+                  console.log('Parsing SSE line:', jsonStr.substring(0, 100) + (jsonStr.length > 100 ? '...' : ''));
+                  const data = JSON.parse(jsonStr);
+                  
+                  if (data.status === 'progress') {
+                    // Update the bot message with progress and timing
+                    const elapsed = data.elapsed_seconds || ((Date.now() - requestStartTime) / 1000);
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === currentBotMessageId 
+                        ? { ...msg, content: `🤖 ${data.message} (${elapsed.toFixed(1)}s)` }
                         : msg
-                    )
-                  );
-                }
-                if (data.sources) {
-                  sources = data.sources;
-                }
-                if (data.done && sources.length > 0) {
-                  // Add sources to the message
-                  const sourcesText = '\n\n📚 Sources:\n' + sources.map(s => `• ${s.source} (relevance: ${(s.score * 100).toFixed(1)}%)`).join('\n');
-                  botMessage += sourcesText;
-                  setMessages(prev => 
-                    prev.map(msg => 
-                      msg.id === botMessageId 
-                        ? { ...msg, content: botMessage }
+                    ));
+                  } else if (data.status === 'response_start') {
+                    // Response is starting - show metadata
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === currentBotMessageId 
+                        ? { ...msg, content: `🤖 Generating response... (${data.response_length} chars expected)` }
                         : msg
-                    )
-                  );
+                    ));
+                  } else if (data.status === 'response_chunk') {
+                    // Accumulate response chunks and update UI in real-time
+                    accumulatedResponse += data.chunk;
+                    
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === currentBotMessageId 
+                        ? { ...msg, content: accumulatedResponse }
+                        : msg
+                    ));
+                  } else if (data.status === 'sources') {
+                    // Store sources for final display
+                    responseSources = data.sources;
+                  } else if (data.status === 'complete') {
+                    // Final completion - add timing and sources to accumulated response
+                    const totalTime = data.total_time_seconds || ((Date.now() - requestStartTime) / 1000);
+                    let finalResponse = accumulatedResponse;
+                    
+                    // Add timing info
+                    finalResponse += `\n\n⏱️ **Response Time: ${totalTime.toFixed(1)} seconds**`;
+                    
+                    // Add sources if available
+                    if (responseSources && responseSources.length > 0) {
+                      const sourcesText = '\n\n📚 Sources:\n' + responseSources.map(s => 
+                        `• ${s.source} (relevance: ${(s.score * 100).toFixed(1)}%)`
+                      ).join('\n');
+                      finalResponse += sourcesText;
+                    }
+                    
+                    // Update the bot message with final response including timing and sources
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === currentBotMessageId 
+                        ? { ...msg, content: finalResponse }
+                        : msg
+                    ));
+                    
+                    console.log(`SSE streaming completed in ${totalTime.toFixed(1)} seconds`); // Debug log
+                    break;
+                  } else if (data.status === 'error') {
+                    // Error response
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === currentBotMessageId 
+                        ? { ...msg, content: `❌ Error: ${data.message}` }
+                        : msg
+                    ));
+                    break;
+                  }
+                } catch (parseError) {
+                  console.error('Failed to parse SSE data:', parseError);
+                  console.error('Line causing error:', line);
+                  console.error('Line length:', line.length);
+                  
+                  // If it's a complete status but parsing failed, try to display error
+                  if (line.includes('"status":"complete"')) {
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === currentBotMessageId 
+                        ? { ...msg, content: '❌ Response received but failed to parse. Check console for details.' }
+                        : msg
+                    ));
+                  }
                 }
-              } catch (e) {
-                console.error('Error parsing SSE data:', e);
               }
             }
           }
+        } finally {
+          reader.releaseLock();
         }
       }
       

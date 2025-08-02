@@ -9,7 +9,7 @@ const ChatbotWidget = () => {
     {
       id: 1,
       type: 'bot',
-      content: 'Hello! I\'m your Home Inspection AI Assistant. I can help you understand your inspection report, answer questions about your property, and provide insights about maintenance and repairs. How can I help you today?',
+      content: 'Hello! I\'m your Home Inspector AI Assistant. I can help you with questions about InterNACHI standards, NCHILB regulations, and inspection best practices. Ask me anything about proper inspection procedures, code requirements, or compliance standards. How can I help you today?',
       timestamp: new Date(),
     },
   ]);
@@ -116,16 +116,15 @@ const ChatbotWidget = () => {
         const data = await response.json();
         addMessage('bot', data.answer);
       } else {
-        // Use general chat endpoint for general home inspection questions
+        // Use RAG chat endpoint for inspector questions
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            developer_message: 'You are a helpful home inspection AI assistant. Provide clear, practical advice about home inspection reports, property maintenance, and real estate concerns. Keep responses concise and actionable.',
-            user_message: userMessage,
-            model: 'gpt-4o-mini'
+            message: userMessage,
+            sessionId: `session-${Date.now()}`
           }),
         });
         
@@ -133,10 +132,11 @@ const ChatbotWidget = () => {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // General chat returns streaming text
+        // RAG chat returns SSE stream
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let botMessage = '';
+        let sources = [];
 
         // Add empty bot message to start streaming
         const botMessageId = Date.now();
@@ -153,16 +153,43 @@ const ChatbotWidget = () => {
           if (done) break;
           
           const chunk = decoder.decode(value);
-          botMessage += chunk;
+          const lines = chunk.split('\n');
           
-          // Update the last message (bot's response) with streaming content
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === botMessageId 
-                ? { ...msg, content: botMessage }
-                : msg
-            )
-          );
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.content) {
+                  botMessage += data.content;
+                  // Update the last message with streaming content
+                  setMessages(prev => 
+                    prev.map(msg => 
+                      msg.id === botMessageId 
+                        ? { ...msg, content: botMessage }
+                        : msg
+                    )
+                  );
+                }
+                if (data.sources) {
+                  sources = data.sources;
+                }
+                if (data.done && sources.length > 0) {
+                  // Add sources to the message
+                  const sourcesText = '\n\n📚 Sources:\n' + sources.map(s => `• ${s.source} (relevance: ${(s.score * 100).toFixed(1)}%)`).join('\n');
+                  botMessage += sourcesText;
+                  setMessages(prev => 
+                    prev.map(msg => 
+                      msg.id === botMessageId 
+                        ? { ...msg, content: botMessage }
+                        : msg
+                    )
+                  );
+                }
+              } catch (e) {
+                console.error('Error parsing SSE data:', e);
+              }
+            }
+          }
         }
       }
       

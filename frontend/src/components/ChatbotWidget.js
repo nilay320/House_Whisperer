@@ -337,52 +337,20 @@ const ChatbotWidget = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* PDF Upload Area */}
-            {!uploadedPdf && (
-              <div className="px-4 pb-2">
-                <div
-                  {...getRootProps()}
-                  className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
-                    isDragActive
-                      ? 'border-blue-400 bg-blue-50'
-                      : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
-                  }`}
-                >
-                  <input {...getInputProps()} />
-                  <FileText size={24} className="mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">
-                    {isDragActive
-                      ? 'Drop your inspection report here'
-                      : 'Upload your inspection report PDF'}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Drag & drop or click to browse
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Uploaded PDF Info */}
-            {uploadedPdf && (
-              <div className="px-4 pb-2">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <FileText size={16} className="text-green-600" />
-                      <span className="text-sm font-medium text-green-800">
-                        {uploadedPdf.name}
-                      </span>
-                    </div>
-                    <button
-                      onClick={removePdf}
-                      className="text-green-600 hover:text-green-800"
-                    >
-                      <X size={16} />
-                    </button>
+            {/* Info Section - No PDF Upload Needed */}
+            <div className="px-4 pb-2">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-center space-x-2">
+                  <Bot size={16} className="text-blue-600" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium">NC Inspector AI Assistant</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Ask questions about NC building codes, inspection standards, and licensing requirements
+                    </p>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Input Area */}
             <div className="p-4 border-t border-gray-200">

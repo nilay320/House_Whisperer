@@ -1,6 +1,8 @@
-import { QdrantClient } from '@qdrant/js-client-rest';
-import { OpenAI } from 'openai';
-import { encoding_for_model } from 'tiktoken';
+// Load environment variables
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });
+
+const { QdrantClient } = require('@qdrant/js-client-rest');
+const { OpenAI } = require('openai');
 
 // Initialize clients
 const openai = new OpenAI({
@@ -15,14 +17,6 @@ const qdrant = new QdrantClient({
 const COLLECTION_NAME = 'inspector-standards';
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const CHAT_MODEL = 'gpt-4o-mini';
-
-// Helper function to count tokens
-function countTokens(text, model = 'gpt-4o-mini') {
-  const encoding = encoding_for_model(model);
-  const tokens = encoding.encode(text);
-  encoding.free();
-  return tokens.length;
-}
 
 // Generate embeddings
 async function getEmbedding(text) {
@@ -74,8 +68,8 @@ Provide a clear, accurate answer based on the context above. If the context does
   return response;
 }
 
-// Main handler
-export default async function handler(req, res) {
+// Main handler  
+async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -137,3 +131,5 @@ export default async function handler(req, res) {
     });
   }
 }
+
+module.exports = handler;

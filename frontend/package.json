@@ -4,32 +4,39 @@
   "description": "Home Inspection AI Assistant - Web Frontend",
   "private": true,
   "dependencies": {
+    "@qdrant/js-client-rest": "^1.15.0",
     "@testing-library/jest-dom": "^5.16.4",
     "@testing-library/react": "^13.3.0",
     "@testing-library/user-event": "^13.5.0",
+    "autoprefixer": "^10.4.14",
+    "axios": "^1.4.0",
+    "dotenv": "^17.2.1",
+    "firebase": "^12.0.0",
+    "framer-motion": "^10.12.16",
+    "lucide-react": "^0.263.1",
+    "openai": "^5.11.0",
+    "postcss": "^8.4.24",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "react-router-dom": "^6.3.0",
-    "firebase": "^9.22.0",
-    "axios": "^1.4.0",
+    "react-dropzone": "^14.2.3",
     "react-hook-form": "^7.43.9",
     "react-hot-toast": "^2.4.0",
-    "lucide-react": "^0.263.1",
-    "tailwindcss": "^3.3.2",
-    "autoprefixer": "^10.4.14",
-    "postcss": "^8.4.24",
-    "framer-motion": "^10.12.16",
-    "react-dropzone": "^14.2.3",
     "react-markdown": "^8.0.7",
-    "react-syntax-highlighter": "^15.5.0"
+    "react-router-dom": "^6.3.0",
+    "react-scripts": "5.0.1",
+    "react-syntax-highlighter": "^15.6.1",
+    "tailwindcss": "^3.3.2"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "CI=false react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "ingest:sample": "node scripts/ingest-sample-data.js"
+    "ingest:sample": "node scripts/ingest-sample-data.js",
+    "ingest:pdfs": "node scripts/process-pdfs-simple.js",
+    "ingest:test": "node scripts/process-pdfs-test.js",
+    "ingest:doc": "node scripts/ingest-by-document.js",
+    "test:api": "node scripts/test-api.js"
   },
   "eslintConfig": {
     "extends": [
@@ -51,6 +58,8 @@
   },
   "devDependencies": {
     "@types/react": "^18.2.15",
-    "@types/react-dom": "^18.2.7"
+    "@types/react-dom": "^18.2.7",
+    "langchain": "^0.2.20",
+    "pdf-parse": "^1.1.1"
   }
-} 
+}

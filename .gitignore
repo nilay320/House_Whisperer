@@ -104,3 +104,6 @@ Thumbs.db
 # Build outputs
 frontend/build/
 dist/
+
+# Data files
+docs/data/

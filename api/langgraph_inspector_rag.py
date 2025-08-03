@@ -325,25 +325,36 @@ Choose from: research_agent, synthesis_agent, FINISH"""),
             has_web_results = bool(state.get("web_results"))
             
             # Routing logic
-            # Check if we've already done research
-            has_done_research = "context" in state
+            # Check if we've already done research (not just if key exists, but if it has content)
+            has_done_research = bool(state.get("context"))  # True only if context exists AND has items
+            # Check if we've attempted research (key exists, even if empty)
+            has_attempted_research = "context" in state
             
-            # If no research done yet, always do research first
-            if not has_done_research:
+            # If no research attempted yet, always do research first
+            if not has_attempted_research:
                 next_agent = "research_agent"
-                print("🤖 Supervisor decision: No research done yet -> research_agent")
-            # After research, check if we should also do web search
-            elif should_search_web and not has_web_results:
+                print("🤖 Supervisor decision: No research attempted yet -> research_agent")
+            # After research attempt, check if we should do web search
+            # This happens if: no docs found OR query suggests web search would help
+            elif (has_attempted_research and should_search_web and not has_web_results):
                 next_agent = "web_search_agent"
                 print("🤖 Supervisor decision: Need web search -> web_search_agent")
-            # If we have some results (context and/or web) but no response, synthesize
-            elif not state.get("response") or len(state.get("response", "").strip()) == 0:
+            # If we have attempted research and either have results or web results, synthesize
+            elif has_attempted_research and (has_done_research or has_web_results) and (not state.get("response") or len(state.get("response", "").strip()) == 0):
                 next_agent = "synthesis_agent"
                 print("🤖 Supervisor decision: Have results, no response -> synthesis_agent")
-            # If we have both context and response, we're done
-            else:
+            # Special case: if research found nothing AND web search isn't triggered by keywords, still do web search
+            elif has_attempted_research and not has_done_research and not has_web_results and not should_search_web:
+                next_agent = "web_search_agent"
+                print("🤖 Supervisor decision: No results from research, trying web search -> web_search_agent")
+            # If we have a response, we're done
+            elif state.get("response") and len(state.get("response", "").strip()) > 0:
                 next_agent = "FINISH"
-                print("🤖 Supervisor decision: Have context and response -> FINISH")
+                print("🤖 Supervisor decision: Have response -> FINISH")
+            else:
+                # Fallback: if nothing else matches, finish
+                next_agent = "FINISH"
+                print("🤖 Supervisor decision: Fallback -> FINISH")
         
         return {
             **state,
@@ -495,6 +506,8 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
         regulatory_docs = state.get("context", [])
         web_docs = state.get("web_results", [])
         
+        print(f"✍️ Synthesis state - regulatory_docs: {len(regulatory_docs)}, web_docs: {len(web_docs)}")
+        
         # Build structured context
         context_parts = []
         
@@ -506,6 +519,10 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
             context_parts.append(f"REGULATORY SOURCES:\n{reg_content}")
         
         if web_docs:  # Web search results
+            # Debug: print first doc content preview
+            if web_docs:
+                print(f"✍️ First web doc preview: {web_docs[0].page_content[:200]}...")
+            
             web_content = "\n\n".join([
                 f"Source: {doc.metadata.get('source', 'Unknown')}\nURL: {doc.metadata.get('url', '')}\n{doc.page_content}"
                 for doc in web_docs[:3]
@@ -513,6 +530,8 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
             context_parts.append(f"WEB RESOURCES:\n{web_content}")
         
         context_text = "\n\n".join(context_parts) if context_parts else "No relevant context found."
+        
+        print(f"✍️ Context text length: {len(context_text)}, Parts: {len(context_parts)}")
         
         synthesis_prompt = f"""You are a North Carolina home inspection expert. Answer the question using ONLY the provided research context.
 

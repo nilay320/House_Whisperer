@@ -466,6 +466,11 @@ async def health_check():
             "QDRANT_URL": "set" if os.getenv("QDRANT_URL") else "not set", 
             "QDRANT_API_KEY": "set" if os.getenv("QDRANT_API_KEY") else "not set"
         },
+        "env_lengths": {
+            "OPENAI_KEY_LEN": len(os.getenv("OPENAI_API_KEY", "")),
+            "QDRANT_URL_LEN": len(os.getenv("QDRANT_URL", "")),
+            "QDRANT_KEY_LEN": len(os.getenv("QDRANT_API_KEY", ""))
+        },
         "services": {
             "qdrant": qdrant_status,
             "qdrant_error": qdrant_error

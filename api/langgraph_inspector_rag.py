@@ -56,12 +56,12 @@ def _initialize_clients():
             raise ValueError("OPENAI_API_KEY environment variable not set")
     
     qdrant_url = os.environ.get("QDRANT_URL")
-    qdrant_key = os.environ.get("QDRANT_API_KEY")
+    qdrant_api_key = os.environ.get("QDRANT_API_KEY")
     if qdrant_url:
         qdrant_url = qdrant_url.strip()  # Strip whitespace
-    if qdrant_key:
-        qdrant_key = qdrant_key.strip()  # Strip whitespace
-    if not qdrant_url or not qdrant_key:
+    if qdrant_api_key:
+        qdrant_api_key = qdrant_api_key.strip()  # Strip whitespace
+    if not qdrant_url or not qdrant_api_key:
         raise ValueError("QDRANT_URL or QDRANT_API_KEY environment variables not set")
     
     print(f"✅ Environment variables checked - OpenAI key: {openai_key[:10]}...")

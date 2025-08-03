@@ -98,24 +98,36 @@ def _initialize_clients():
         
         # Initialize with proper parameters (as suggested by Claude UI)
         try:
+            # Ensure we have the API key
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not found in environment")
+                
             embeddings = OpenAIEmbeddings(
                 model=EMBEDDING_MODEL,
-                openai_api_key=os.environ.get("OPENAI_API_KEY")
+                openai_api_key=api_key
             )
-            print("✅ OpenAI Embeddings initialized successfully")
+            print(f"✅ OpenAI Embeddings initialized successfully with key: {api_key[:10]}...")
         except Exception as e:
             print(f"❌ Failed to initialize embeddings: {e}")
             raise
             
     if llm is None:
         try:
+            # Ensure we have the API key
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not found in environment")
+                
             llm = ChatOpenAI(
                 model=CHAT_MODEL,
                 temperature=0.1,
-                openai_api_key=os.environ.get("OPENAI_API_KEY"),
-                callbacks=[]  # Explicit empty callbacks as suggested
+                openai_api_key=api_key,
+                callbacks=[],  # Explicit empty callbacks as suggested
+                request_timeout=30,  # Add timeout for serverless
+                max_retries=2  # Reduce retries for faster failure
             )
-            print("✅ ChatOpenAI initialized successfully")
+            print(f"✅ ChatOpenAI initialized successfully with key: {api_key[:10]}...")
         except Exception as e:
             print(f"❌ Failed to initialize ChatOpenAI: {e}")
             raise
@@ -418,8 +430,11 @@ Create a comprehensive, well-organized response that addresses the question thor
             # Check if it's an API key issue
             if "api_key" in str(llm_error).lower() or "unauthorized" in str(llm_error).lower():
                 response = "API key authentication error. Please check environment variables."
+            elif "connection" in str(llm_error).lower() or "timeout" in str(llm_error).lower():
+                # For connection errors, provide a useful response from the research
+                response = f"Based on the research I found:\n\n{context_text[:1500]}\n\nNote: AI synthesis temporarily unavailable due to connection issues."
             else:
-                response = f"I apologize, but I'm experiencing a connection error with the AI service. However, based on the research I found:\n\n{context_text[:500]}...\n\nPlease try your question again in a moment."
+                response = f"I apologize, but I'm experiencing an error with the AI service ({type(llm_error).__name__}). However, based on the research I found:\n\n{context_text[:1000]}...\n\nError details: {str(llm_error)[:200]}"
         
         # Signal that synthesis is complete and workflow should finish
         total_synthesis_time = time.time() - synthesis_start

@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+"""Web search tools for House Whisperer Inspector AI using Tavily.
+
+Adapted from Deep Research notebook for home inspection context.
+"""
+
+import os
+import asyncio
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+import logging
+
+from tavily import TavilyClient
+from langchain_core.tools import tool
+from langchain_core.documents import Document
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Initialize Tavily client
+def get_tavily_client():
+    """Get Tavily client with proper error handling."""
+    api_key = os.getenv("TAVILY_API_KEY")
+    if not api_key:
+        raise ValueError("TAVILY_API_KEY not found in environment variables")
+    return TavilyClient(api_key=api_key)
+
+# Domain configuration for home inspection sources
+TRUSTED_DOMAINS = [
+    "nachi.org",           # InterNACHI
+    "nchilb.nc.gov",      # NC Home Inspector Licensure Board
+    "ashireporter.org",    # ASHI Reporter
+    "cpsc.gov",           # Consumer Product Safety Commission (recalls)
+    "nfpa.org",           # National Fire Protection Association
+    "buildingcodes.nc.gov" # NC Building Codes
+]
+
+EXCLUDED_DOMAINS = [
+    "pinterest.com",
+    "facebook.com",
+    "amazon.com",
+    "ebay.com",
+    "youtube.com",  # Exclude video results for now
+    "reddit.com"    # Can be added back for specific queries
+]
+
+async def tavily_search_async(
+    query: str,
+    max_results: int = 5,
+    include_raw_content: bool = True,
+    search_depth: str = "advanced"
+) -> List[Dict[str, Any]]:
+    """
+    Async Tavily search with home inspection context.
+    
+    Adapted from Deep Research notebook with specific domains for inspection.
+    """
+    try:
+        client = get_tavily_client()
+        
+        # Enhance query with inspection context
+        enhanced_query = f"home inspection {query}"
+        if "north carolina" not in query.lower() and "nc" not in query.lower():
+            enhanced_query += " North Carolina"
+        
+        logger.info(f"🔍 Searching web for: {enhanced_query}")
+        
+        # Perform search with domain filtering
+        response = client.search(
+            query=enhanced_query,
+            max_results=max_results,
+            include_raw_content=include_raw_content,
+            search_depth=search_depth,
+            include_domains=TRUSTED_DOMAINS,
+            exclude_domains=EXCLUDED_DOMAINS
+        )
+        
+        # Format results similar to Deep Research
+        formatted_results = []
+        for result in response.get('results', []):
+            formatted_results.append({
+                "query": query,
+                "title": result.get('title', ''),
+                "url": result.get('url', ''),
+                "content": result.get('content', ''),
+                "raw_content": result.get('raw_content', result.get('content', '')),
+                "score": result.get('score', 0.0),
+                "source": extract_source_name(result.get('url', '')),
+                "fetched_at": datetime.now().isoformat()
+            })
+        
+        logger.info(f"✅ Found {len(formatted_results)} results")
+        return formatted_results
+        
+    except Exception as e:
+        logger.error(f"❌ Tavily search error: {str(e)}")
+        return []
+
+def extract_source_name(url: str) -> str:
+    """Extract human-readable source name from URL."""
+    domain_mapping = {
+        "nachi.org": "InterNACHI",
+        "nchilb.nc.gov": "NC Home Inspector Licensure Board",
+        "ashireporter.org": "ASHI Reporter",
+        "cpsc.gov": "Consumer Product Safety Commission",
+        "nfpa.org": "National Fire Protection Association",
+        "buildingcodes.nc.gov": "NC Building Codes"
+    }
+    
+    for domain, name in domain_mapping.items():
+        if domain in url:
+            return name
+    
+    # Extract domain name as fallback
+    try:
+        from urllib.parse import urlparse
+        domain = urlparse(url).netloc.replace('www.', '')
+        return domain.split('.')[0].title()
+    except:
+        return "Web Source"
+
+def deduplicate_and_format_sources(
+    search_results: List[Dict[str, Any]],
+    max_length: int = 2000
+) -> List[Dict[str, Any]]:
+    """
+    Deduplicate and format search results.
+    
+    Adapted from Deep Research to maintain unique sources.
+    """
+    seen_urls = set()
+    unique_results = []
+    
+    for result in search_results:
+        url = result.get('url', '')
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            
+            # Truncate content if needed
+            content = result.get('raw_content', result.get('content', ''))
+            if len(content) > max_length:
+                content = content[:max_length] + "..."
+            
+            unique_results.append({
+                **result,
+                'content': content
+            })
+    
+    # Sort by relevance score
+    return sorted(unique_results, key=lambda x: x.get('score', 0), reverse=True)
+
+@tool
+def search_web_for_inspection_info(
+    query: str,
+    max_results: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    Search the web for home inspection information.
+    
+    This tool searches trusted inspection sources and returns relevant content
+    for questions about home inspection standards, best practices, recalls,
+    and current industry information.
+    
+    Args:
+        query: Search query related to home inspection
+        max_results: Maximum number of results to return (default 5)
+    
+    Returns:
+        List of search results with title, content, URL, and relevance score
+    """
+    try:
+        # Run async search in sync context
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        results = loop.run_until_complete(
+            tavily_search_async(query, max_results)
+        )
+        
+        # Deduplicate and format
+        formatted_results = deduplicate_and_format_sources(results)
+        
+        # Convert to format expected by LangGraph
+        return [{
+            "content": r['content'],
+            "source": f"{r['source']}: {r['title']}",
+            "url": r['url'],
+            "score": r['score'],
+            "type": "web_resource"  # Different from "regulatory"
+        } for r in formatted_results[:max_results]]
+        
+    except Exception as e:
+        logger.error(f"Web search tool error: {str(e)}")
+        return []
+
+@tool
+def search_for_recalls(
+    product_name: str,
+    manufacturer: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Search specifically for product recalls related to home inspection.
+    
+    This tool focuses on CPSC and manufacturer recall information for
+    products commonly found during home inspections.
+    
+    Args:
+        product_name: Name of the product (e.g., "Federal Pacific panel")
+        manufacturer: Optional manufacturer name for more specific search
+    
+    Returns:
+        List of recall information with details and recommendations
+    """
+    # Build specific recall query
+    recall_query = f"recall {product_name}"
+    if manufacturer:
+        recall_query += f" {manufacturer}"
+    
+    # Search with CPSC priority
+    try:
+        client = get_tavily_client()
+        response = client.search(
+            query=recall_query,
+            max_results=3,
+            include_raw_content=True,
+            include_domains=["cpsc.gov", "recalls.gov"],
+            search_depth="advanced"
+        )
+        
+        results = []
+        for result in response.get('results', []):
+            results.append({
+                "content": result.get('content', ''),
+                "source": f"Recall Notice: {result.get('title', '')}",
+                "url": result.get('url', ''),
+                "type": "recall_notice",
+                "product": product_name,
+                "date": extract_date_from_content(result.get('content', ''))
+            })
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Recall search error: {str(e)}")
+        return []
+
+def extract_date_from_content(content: str) -> Optional[str]:
+    """Extract date from recall content if possible."""
+    # Simple date extraction - could be enhanced
+    import re
+    date_pattern = r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b'
+    match = re.search(date_pattern, content)
+    return match.group() if match else None
+
+# Utility function for testing
+def test_web_search():
+    """Test the web search functionality."""
+    print("🧪 Testing web search tools...\n")
+    
+    # Test general search
+    results = search_web_for_inspection_info.invoke({"query": "electrical panel clearance requirements"})
+    print(f"✅ General search returned {len(results)} results")
+    if results:
+        print(f"   Top result: {results[0]['source']}")
+    
+    # Test recall search
+    recall_results = search_for_recalls.invoke({"product_name": "Federal Pacific", "manufacturer": "Stab-Lok"})
+    print(f"✅ Recall search returned {len(recall_results)} results")
+    if recall_results:
+        print(f"   Top recall: {recall_results[0]['source']}")
+    
+    print("\n✨ Web search tools ready!")
+
+if __name__ == "__main__":
+    test_web_search()

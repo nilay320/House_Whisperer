@@ -13,3 +13,4 @@ langchain-qdrant
 langgraph
 qdrant-client
 langchain-text-splitters
+tavily-python==0.5.0

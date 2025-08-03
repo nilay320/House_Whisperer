@@ -24,6 +24,9 @@ from langgraph.prebuilt import create_react_agent
 # Qdrant client
 from qdrant_client import QdrantClient
 
+# Import web search tools
+from web_search_tools import search_web_for_inspection_info, search_for_recalls
+
 # Load environment variables
 load_dotenv()
 
@@ -111,6 +114,7 @@ def _initialize_clients():
 class InspectorRAGState(TypedDict):
     question: str
     context: List[Document]
+    web_results: List[Document]  # Added for web search results
     response: str
     inspector_sources: List[Dict[str, Any]]
     messages: List[BaseMessage]
@@ -243,6 +247,30 @@ Create responses that are practical and useful for working home inspectors."""
     
     return synthesis_agent
 
+def create_web_search_agent():
+    """Create the web search agent for current information and best practices.
+    
+    Following the Deep Research pattern for external information gathering.
+    """
+    system_prompt = """You are a web research specialist for home inspection topics.
+    
+Your role:
+- Search the web for current information, best practices, and industry updates
+- Find manufacturer information, recalls, and technical specifications
+- Look for practical solutions from experienced inspectors
+- Prioritize trusted sources (InterNACHI, ASHI, CPSC, manufacturers)
+- Focus on North Carolina-specific information when relevant
+
+Use the available search tools to find relevant, current information that complements regulatory requirements."""
+
+    web_search_agent = create_react_agent(
+        llm,
+        [search_web_for_inspection_info, search_for_recalls],
+        state_modifier=system_prompt
+    )
+    
+    return web_search_agent
+
 # Supervisor agent following the notebook pattern
 def supervisor_node(state: InspectorRAGState) -> InspectorRAGState:
     """Supervisor that routes between research and synthesis agents."""
@@ -284,11 +312,28 @@ Choose from: research_agent, synthesis_agent, FINISH"""),
             # Use simple logic instead of LLM for more predictable routing
             print("🤖 Supervisor using logic-based routing...")
             
-            # If no context, we need research
+            # Check if web search would be helpful
+            question_lower = state.get("question", "").lower()
+            web_triggers = [
+                "recall", "manufacturer", "model", "brand",
+                "latest", "recent", "2024", "update", "new",
+                "best practice", "tips", "how to", "common issues",
+                "what do other inspectors", "forum", "discussion"
+            ]
+            
+            should_search_web = any(trigger in question_lower for trigger in web_triggers)
+            has_web_results = bool(state.get("web_results"))
+            
+            # Routing logic
+            # If no context, we need research first
             if not state.get("context") or len(state.get("context", [])) == 0:
                 next_agent = "research_agent"
                 print("🤖 Supervisor decision: No context -> research_agent")
-            # If we have context but no response, we need synthesis
+            # If we should search web and haven't yet
+            elif should_search_web and not has_web_results:
+                next_agent = "web_search_agent"
+                print("🤖 Supervisor decision: Need web search -> web_search_agent")
+            # If we have context (and optionally web results) but no response, we need synthesis
             elif not state.get("response") or len(state.get("response", "").strip()) == 0:
                 next_agent = "synthesis_agent"
                 print("🤖 Supervisor decision: Have context, no response -> synthesis_agent")
@@ -367,6 +412,71 @@ def research_node(state: InspectorRAGState) -> InspectorRAGState:
             "inspector_sources": []
         }
 
+def web_search_node(state: InspectorRAGState) -> InspectorRAGState:
+    """Web search agent node - searches for current information.
+    
+    Following the Deep Research pattern for external information gathering.
+    """
+    import time
+    search_start = time.time()
+    
+    try:
+        print(f"🌐 Web search starting for: {state['question']}")
+        
+        # Ensure clients are initialized
+        _initialize_clients()
+        
+        # Direct web search using the tool
+        web_results = search_web_for_inspection_info.invoke({"query": state["question"]})
+        
+        # Check if we need recall information
+        if any(word in state["question"].lower() for word in ["recall", "defect", "dangerous", "safety"]):
+            # Extract product/manufacturer from question (simple approach)
+            recall_results = search_for_recalls.invoke({"product_name": state["question"]})
+            web_results.extend(recall_results)
+        
+        # Convert to Documents for consistency
+        web_docs = []
+        for result in web_results:
+            if "error" not in result:
+                doc = Document(
+                    page_content=result["content"],
+                    metadata={
+                        "source": result["source"],
+                        "url": result.get("url", ""),
+                        "score": result.get("score", 0.0),
+                        "type": result.get("type", "web_resource")
+                    }
+                )
+                web_docs.append(doc)
+        
+        search_time = time.time() - search_start
+        print(f"🌐 Web search complete: Found {len(web_docs)} relevant resources in {search_time:.2f}s")
+        
+        # Extract sources for display
+        web_sources = []
+        for doc in web_docs:
+            web_sources.append({
+                "source": doc.metadata.get("source", "Unknown"),
+                "url": doc.metadata.get("url", ""),
+                "type": doc.metadata.get("type", "web_resource")
+            })
+        
+        return {
+            **state,
+            "web_results": web_docs,
+            "inspector_sources": state.get("inspector_sources", []) + web_sources,
+            "next_agent": "synthesis_agent"  # After web search, go to synthesis
+        }
+        
+    except Exception as e:
+        print(f"Web search error: {e}")
+        return {
+            **state,
+            "web_results": [],
+            "next_agent": "synthesis_agent"  # Continue even if web search fails
+        }
+
 def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
     """Synthesis agent node - optimized for speed."""
     import time
@@ -378,11 +488,9 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
         # Ensure clients are initialized
         _initialize_clients()
         
-        # Group context by source type (ready for regulatory + articles)
-        regulatory_docs = [doc for doc in state.get("context", []) 
-                          if doc.metadata.get("type") == "regulatory"]
-        article_docs = [doc for doc in state.get("context", []) 
-                       if doc.metadata.get("type") == "article"]
+        # Group context by source type
+        regulatory_docs = state.get("context", [])
+        web_docs = state.get("web_results", [])
         
         # Build structured context
         context_parts = []
@@ -394,12 +502,12 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
             ])
             context_parts.append(f"REGULATORY SOURCES:\n{reg_content}")
         
-        if article_docs:  # Future: when Firecrawl is added
-            article_content = "\n\n".join([
-                f"Source: {doc.metadata.get('source', 'Unknown')}\n{doc.page_content}"
-                for doc in article_docs[:3]
+        if web_docs:  # Web search results
+            web_content = "\n\n".join([
+                f"Source: {doc.metadata.get('source', 'Unknown')}\nURL: {doc.metadata.get('url', '')}\n{doc.page_content}"
+                for doc in web_docs[:3]
             ])
-            context_parts.append(f"RECENT ARTICLES:\n{article_content}")
+            context_parts.append(f"WEB RESOURCES:\n{web_content}")
         
         context_text = "\n\n".join(context_parts) if context_parts else "No relevant context found."
         
@@ -412,10 +520,13 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
 
         INSTRUCTIONS:
         - Answer ONLY based on the provided context above
+        - When REGULATORY SOURCES are present, prioritize them for requirements and standards
+        - When WEB RESOURCES are present, use them for best practices, current information, and practical tips
+        - Clearly distinguish between mandatory requirements (from regulations) and recommended practices (from web sources)
         - If the context doesn't contain enough information to answer the question, say "I don't have enough information in the provided sources to answer this question"
         - Do not use external knowledge beyond what's provided
         - Include specific requirements, standards, and procedures from the sources
-        - Cite which sources you're referencing
+        - Cite which sources you're referencing, including URLs for web resources when relevant
         - Format professionally for working home inspectors
         - Keep response focused and relevant to the question"""
 
@@ -490,7 +601,7 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
             "response": f"Error generating response: {str(e)}"
         }
 
-def should_continue(state: InspectorRAGState) -> Literal["research_agent", "synthesis_agent", "__end__"]:
+def should_continue(state: InspectorRAGState) -> Literal["research_agent", "web_search_agent", "synthesis_agent", "__end__"]:
     """Determine the next step based on supervisor decision."""
     
     print(f"🎯 should_continue check:")
@@ -511,6 +622,9 @@ def should_continue(state: InspectorRAGState) -> Literal["research_agent", "synt
     elif next_agent == "research_agent":
         print("📚 Continuing to research_agent")
         return "research_agent"
+    elif next_agent == "web_search_agent":
+        print("🌐 Continuing to web_search_agent")
+        return "web_search_agent"
     elif next_agent == "synthesis_agent":
         print("✍️ Continuing to synthesis_agent")
         return "synthesis_agent"
@@ -533,6 +647,7 @@ def create_inspector_rag_graph():
     # Add nodes
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("research_agent", research_node)
+    workflow.add_node("web_search_agent", web_search_node)
     workflow.add_node("synthesis_agent", synthesis_node)
     
     # Add edges - start with supervisor
@@ -544,13 +659,15 @@ def create_inspector_rag_graph():
         should_continue,
         {
             "research_agent": "research_agent",
+            "web_search_agent": "web_search_agent",
             "synthesis_agent": "synthesis_agent",
             "__end__": END
         }
     )
     
-    # Both agents return to supervisor
+    # All agents return to supervisor
     workflow.add_edge("research_agent", "supervisor")
+    workflow.add_edge("web_search_agent", "supervisor")
     workflow.add_edge("synthesis_agent", "supervisor")
     
     # Add memory
@@ -584,6 +701,7 @@ async def query_inspector_rag_streaming(question: str, thread_id: str = "default
         initial_state = {
             "question": question,
             "context": [],
+            "web_results": [],
             "response": "",
             "inspector_sources": [],
             "messages": [],
@@ -621,6 +739,13 @@ async def query_inspector_rag_streaming(question: str, thread_id: str = "default
                         yield {"type": "progress", "message": f"Found {context_count} relevant documents... ({node_elapsed:.1f}s)"}
                     else:
                         yield {"type": "progress", "message": "Searching through inspection standards..."}
+                
+                elif node_name == "web_search_agent":
+                    if "web_results" in state and len(state.get("web_results", [])) > 0:
+                        web_count = len(state["web_results"])
+                        yield {"type": "progress", "message": f"Found {web_count} web resources... ({node_elapsed:.1f}s)"}
+                    else:
+                        yield {"type": "progress", "message": "Searching the web for current information..."}
                 
                 elif node_name == "synthesis_agent":
                     yield {"type": "progress", "message": f"Analyzing research and generating response... ({node_elapsed:.1f}s)"}
@@ -675,6 +800,7 @@ def query_inspector_rag(question: str, thread_id: str = "default") -> Dict[str, 
     initial_state = {
         "question": question,
         "context": [],
+        "web_results": [],
         "response": "",
         "inspector_sources": [],
         "messages": [],

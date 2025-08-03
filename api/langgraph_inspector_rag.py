@@ -134,11 +134,22 @@ def _initialize_clients():
             
     if qdrant_client is None:
         try:
+            # Get and validate Qdrant credentials
+            qdrant_url = os.environ.get("QDRANT_URL")
+            qdrant_api_key = os.environ.get("QDRANT_API_KEY")
+            
+            if not qdrant_url or not qdrant_api_key:
+                raise ValueError("QDRANT_URL or QDRANT_API_KEY not set")
+            
+            # Strip any whitespace that might cause header issues
+            qdrant_api_key = qdrant_api_key.strip()
+            
             qdrant_client = QdrantClient(
-                url=os.environ.get("QDRANT_URL"),
-                api_key=os.environ.get("QDRANT_API_KEY"),
+                url=qdrant_url,
+                api_key=qdrant_api_key,
+                timeout=30  # Add timeout for serverless
             )
-            print("✅ Qdrant client initialized successfully")
+            print(f"✅ Qdrant client initialized successfully - URL: {qdrant_url}")
         except Exception as e:
             print(f"❌ Failed to initialize Qdrant: {e}")
             raise
@@ -169,6 +180,9 @@ def search_inspector_standards(query: str) -> List[Dict[str, Any]]:
     Use this for questions about home inspection requirements, standards, or regulations.
     """
     try:
+        # Initialize clients if needed
+        _initialize_clients()
+        
         # Use direct Qdrant search to preserve metadata properly
         query_embedding = embeddings.embed_query(query)
         

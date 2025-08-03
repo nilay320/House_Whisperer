@@ -384,7 +384,9 @@ async def test_rag():
     
     # Test 1: Search function
     try:
-        from langgraph_inspector_rag import search_inspector_standards
+        from langgraph_inspector_rag import _initialize_clients, search_inspector_standards
+        # Force initialization
+        _initialize_clients()
         search_results = search_inspector_standards("electrical clearance")
         results["search"] = {
             "status": "success",
@@ -392,20 +394,50 @@ async def test_rag():
             "sample": search_results[0] if search_results else None
         }
     except Exception as e:
-        results["search"] = {"status": "error", "error": str(e)[:200]}
+        results["search"] = {"status": "error", "error": str(e)[:200], "type": type(e).__name__}
     
     # Test 2: OpenAI connection
     try:
+        import httpx
         from langchain_openai import ChatOpenAI
-        llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            temperature=0
-        )
-        response = llm.invoke("Say 'test successful'")
-        results["openai"] = {"status": "success", "response": response.content[:50]}
+        
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            results["openai"] = {"status": "error", "error": "No API key"}
+        else:
+            # Test with timeout and explicit client
+            llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                openai_api_key=api_key,
+                temperature=0,
+                request_timeout=10,
+                max_retries=1
+            )
+            response = llm.invoke("Say 'test successful'")
+            results["openai"] = {"status": "success", "response": response.content[:50]}
+    except httpx.ConnectError as e:
+        results["openai"] = {"status": "error", "error": "Network connection failed", "details": str(e)[:100]}
     except Exception as e:
-        results["openai"] = {"status": "error", "error": str(e)[:200]}
+        results["openai"] = {"status": "error", "error": str(e)[:200], "type": type(e).__name__}
+    
+    # Test 3: Direct API calls
+    try:
+        import requests
+        # Test OpenAI directly
+        headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
+        response = requests.get("https://api.openai.com/v1/models", headers=headers, timeout=5)
+        results["openai_direct"] = {"status": response.status_code, "ok": response.ok}
+    except Exception as e:
+        results["openai_direct"] = {"status": "error", "error": str(e)[:100]}
+    
+    # Test 4: Direct Qdrant test
+    try:
+        import requests
+        headers = {"api-key": os.getenv("QDRANT_API_KEY")}
+        response = requests.get(f"{os.getenv('QDRANT_URL')}/collections", headers=headers, timeout=5)
+        results["qdrant_direct"] = {"status": response.status_code, "ok": response.ok}
+    except Exception as e:
+        results["qdrant_direct"] = {"status": "error", "error": str(e)[:100]}
     
     return results
 

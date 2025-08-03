@@ -325,18 +325,18 @@ Choose from: research_agent, synthesis_agent, FINISH"""),
             has_web_results = bool(state.get("web_results"))
             
             # Routing logic
-            # If no context, we need research first
-            if not state.get("context") or len(state.get("context", [])) == 0:
+            # If no research done yet, always do research first
+            if not state.get("context") and not state.get("web_results"):
                 next_agent = "research_agent"
                 print("🤖 Supervisor decision: No context -> research_agent")
-            # If we should search web and haven't yet
+            # After research, check if we should also do web search
             elif should_search_web and not has_web_results:
                 next_agent = "web_search_agent"
                 print("🤖 Supervisor decision: Need web search -> web_search_agent")
-            # If we have context (and optionally web results) but no response, we need synthesis
+            # If we have some results (context and/or web) but no response, synthesize
             elif not state.get("response") or len(state.get("response", "").strip()) == 0:
                 next_agent = "synthesis_agent"
-                print("🤖 Supervisor decision: Have context, no response -> synthesis_agent")
+                print("🤖 Supervisor decision: Have results, no response -> synthesis_agent")
             # If we have both context and response, we're done
             else:
                 next_agent = "FINISH"
@@ -401,7 +401,7 @@ def research_node(state: InspectorRAGState) -> InspectorRAGState:
             **state,
             "context": context_docs,
             "inspector_sources": sources,
-            "next_agent": "synthesis_agent"  # Tell supervisor to move to synthesis
+            "next_agent": ""  # Let supervisor decide next step
         }
         
     except Exception as e:

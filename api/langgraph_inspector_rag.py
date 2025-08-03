@@ -44,7 +44,12 @@ def _initialize_clients():
     # Check environment variables first (as suggested by Claude UI debugging steps)
     openai_key = os.environ.get("OPENAI_API_KEY")
     if not openai_key:
-        raise ValueError("OPENAI_API_KEY environment variable not set")
+        # Try loading from .env file as fallback
+        from dotenv import load_dotenv
+        load_dotenv()
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if not openai_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set")
     
     qdrant_url = os.environ.get("QDRANT_URL")
     qdrant_key = os.environ.get("QDRANT_API_KEY")
@@ -405,8 +410,16 @@ Create a comprehensive, well-organized response that addresses the question thor
             
             response = response_message.content if hasattr(response_message, 'content') else str(response_message)
         except Exception as llm_error:
+            import traceback
             print(f"❌ LLM call failed: {llm_error}")
-            response = f"I apologize, but I'm experiencing a connection error with the AI service. However, based on the research I found:\n\n{context_text[:500]}...\n\nPlease try your question again in a moment."
+            print(f"❌ LLM error type: {type(llm_error).__name__}")
+            print(f"❌ Full traceback: {traceback.format_exc()}")
+            
+            # Check if it's an API key issue
+            if "api_key" in str(llm_error).lower() or "unauthorized" in str(llm_error).lower():
+                response = "API key authentication error. Please check environment variables."
+            else:
+                response = f"I apologize, but I'm experiencing a connection error with the AI service. However, based on the research I found:\n\n{context_text[:500]}...\n\nPlease try your question again in a moment."
         
         # Signal that synthesis is complete and workflow should finish
         total_synthesis_time = time.time() - synthesis_start

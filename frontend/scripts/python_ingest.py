@@ -202,9 +202,10 @@ def ingest_document(doc_key: str) -> int:
     collection_info = qdrant_client.get_collection(COLLECTION_NAME)
     start_id = collection_info.points_count
     
-    # Process in batches
-    batch_size = 10
+    # Process in batches - optimized for performance
+    batch_size = 25  # Sweet spot: reduces API calls while keeping payload reasonable
     total_uploaded = 0
+    failed_batches = []
     
     for i in range(0, len(chunks), batch_size):
         batch_chunks = chunks[i:i + batch_size]
@@ -236,14 +237,29 @@ def ingest_document(doc_key: str) -> int:
             )
             points.append(point)
         
-        # Upload batch
-        qdrant_client.upsert(
-            collection_name=COLLECTION_NAME,
-            points=points
-        )
-        
-        total_uploaded += len(batch_chunks)
-        print(f"   ✅ Uploaded batch {batch_num}")
+        # Upload batch with error handling
+        try:
+            qdrant_client.upsert(
+                collection_name=COLLECTION_NAME,
+                points=points,
+                wait=True  # Wait for operation to complete
+            )
+            
+            total_uploaded += len(batch_chunks)
+            print(f"   ✅ Uploaded batch {batch_num}")
+            
+            # Add small delay for large documents to avoid rate limiting
+            if len(chunks) > 1000 and batch_num % 20 == 0:
+                import time
+                time.sleep(0.5)
+                print(f"   ⏸️  Rate limit pause... ({total_uploaded}/{len(chunks)} chunks uploaded)")
+                
+        except Exception as e:
+            print(f"   ❌ Failed batch {batch_num}: {e}")
+            failed_batches.append(batch_num)
+    
+    if failed_batches:
+        print(f"⚠️  Warning: {len(failed_batches)} batches failed: {failed_batches[:10]}...")
     
     print(f"🎉 Completed {doc_key}: {total_uploaded} chunks ingested")
     return total_uploaded

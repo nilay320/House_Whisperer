@@ -107,3 +107,4 @@ dist/
 
 # Data files
 docs/data/**/*.pdf
+.env*.local

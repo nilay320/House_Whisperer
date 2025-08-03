@@ -43,16 +43,24 @@ def _initialize_clients():
     
     # Check environment variables first (as suggested by Claude UI debugging steps)
     openai_key = os.environ.get("OPENAI_API_KEY")
+    if openai_key:
+        openai_key = openai_key.strip()  # Strip whitespace
     if not openai_key:
         # Try loading from .env file as fallback
         from dotenv import load_dotenv
         load_dotenv()
         openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key:
+            openai_key = openai_key.strip()
         if not openai_key:
             raise ValueError("OPENAI_API_KEY environment variable not set")
     
     qdrant_url = os.environ.get("QDRANT_URL")
     qdrant_key = os.environ.get("QDRANT_API_KEY")
+    if qdrant_url:
+        qdrant_url = qdrant_url.strip()  # Strip whitespace
+    if qdrant_key:
+        qdrant_key = qdrant_key.strip()  # Strip whitespace
     if not qdrant_url or not qdrant_key:
         raise ValueError("QDRANT_URL or QDRANT_API_KEY environment variables not set")
     
@@ -134,15 +142,8 @@ def _initialize_clients():
             
     if qdrant_client is None:
         try:
-            # Get and validate Qdrant credentials
-            qdrant_url = os.environ.get("QDRANT_URL")
-            qdrant_api_key = os.environ.get("QDRANT_API_KEY")
-            
-            if not qdrant_url or not qdrant_api_key:
-                raise ValueError("QDRANT_URL or QDRANT_API_KEY not set")
-            
-            # Strip any whitespace that might cause header issues
-            qdrant_api_key = qdrant_api_key.strip()
+            # Get and validate Qdrant credentials (use the stripped versions from above)
+            # qdrant_url and qdrant_api_key are already set and stripped above
             
             qdrant_client = QdrantClient(
                 url=qdrant_url,

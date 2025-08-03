@@ -423,8 +423,9 @@ async def test_rag():
     # Test 3: Direct API calls
     try:
         import requests
-        # Test OpenAI directly
-        headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
+        # Test OpenAI directly (strip whitespace)
+        api_key = os.getenv('OPENAI_API_KEY', '').strip()
+        headers = {"Authorization": f"Bearer {api_key}"}
         response = requests.get("https://api.openai.com/v1/models", headers=headers, timeout=5)
         results["openai_direct"] = {"status": response.status_code, "ok": response.ok}
     except Exception as e:
@@ -433,8 +434,11 @@ async def test_rag():
     # Test 4: Direct Qdrant test
     try:
         import requests
-        headers = {"api-key": os.getenv("QDRANT_API_KEY")}
-        response = requests.get(f"{os.getenv('QDRANT_URL')}/collections", headers=headers, timeout=5)
+        # Strip whitespace from both URL and API key
+        qdrant_url = os.getenv('QDRANT_URL', '').strip()
+        qdrant_key = os.getenv('QDRANT_API_KEY', '').strip()
+        headers = {"api-key": qdrant_key}
+        response = requests.get(f"{qdrant_url}/collections", headers=headers, timeout=5)
         results["qdrant_direct"] = {"status": response.status_code, "ok": response.ok}
     except Exception as e:
         results["qdrant_direct"] = {"status": "error", "error": str(e)[:100]}
@@ -449,9 +453,12 @@ async def health_check():
     qdrant_error = None
     try:
         from qdrant_client import QdrantClient
+        # Strip whitespace from environment variables
+        qdrant_url = os.getenv("QDRANT_URL", "").strip()
+        qdrant_key = os.getenv("QDRANT_API_KEY", "").strip()
         client = QdrantClient(
-            url=os.getenv("QDRANT_URL"),
-            api_key=os.getenv("QDRANT_API_KEY")
+            url=qdrant_url,
+            api_key=qdrant_key
         )
         collections = client.get_collections()
         qdrant_status = f"connected ({len(collections.collections)} collections)"

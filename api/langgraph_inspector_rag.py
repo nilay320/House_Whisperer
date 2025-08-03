@@ -45,38 +45,18 @@ llm = None
 qdrant_client = None
 
 def _initialize_clients():
-    """Initialize clients if not already done."""
+    """Initialize clients with necessary Pydantic rebuilds."""
     global embeddings, llm, qdrant_client
     
-    # Check environment variables first (as suggested by Claude UI debugging steps)
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    if openai_key:
-        openai_key = openai_key.strip()  # Strip whitespace
-    if not openai_key:
-        # Try loading from .env file as fallback
-        from dotenv import load_dotenv
-        load_dotenv()
-        openai_key = os.environ.get("OPENAI_API_KEY")
-        if openai_key:
-            openai_key = openai_key.strip()
-        if not openai_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
+    # Validate environment variables
+    required_vars = ["OPENAI_API_KEY", "QDRANT_URL", "QDRANT_API_KEY"]
+    missing = [var for var in required_vars if not os.environ.get(var)]
+    if missing:
+        raise ValueError(f"Missing environment variables: {missing}")
     
-    qdrant_url = os.environ.get("QDRANT_URL")
-    qdrant_api_key = os.environ.get("QDRANT_API_KEY")
-    if qdrant_url:
-        qdrant_url = qdrant_url.strip()  # Strip whitespace
-    if qdrant_api_key:
-        qdrant_api_key = qdrant_api_key.strip()  # Strip whitespace
-    if not qdrant_url or not qdrant_api_key:
-        raise ValueError("QDRANT_URL or QDRANT_API_KEY environment variables not set")
-    
-    print(f"✅ Environment variables checked - OpenAI key: {openai_key[:10]}...")
-    
-    if embeddings is None:
-        # Fix Pydantic compatibility issue by properly setting up callbacks and rebuilding models
+    if embeddings is None or llm is None:
+        # Add back the necessary Pydantic model rebuilding with Callbacks type definition
         try:
-            # Import all required classes and types first
             from langchain_core.caches import BaseCache
             from langchain_openai import ChatOpenAI, OpenAIEmbeddings
             from langchain_core.callbacks import BaseCallbackManager, Callbacks
@@ -92,67 +72,40 @@ def _initialize_clients():
             current_module = sys.modules[__name__]
             setattr(current_module, 'Callbacks', Callbacks)
             
-            # Define callbacks before model rebuild (as suggested by Claude UI)
-            callbacks = []  # Empty callbacks list for now
-            
-            # Force model rebuilds in correct order with proper dependencies
+            # Rebuild in correct order
             if hasattr(BaseCache, 'model_rebuild'):
                 BaseCache.model_rebuild()
             if hasattr(BaseCallbackManager, 'model_rebuild'):
                 BaseCallbackManager.model_rebuild()
             
-            # Rebuild models now that dependencies are in place and Callbacks is defined
+            # Rebuild the main models now that Callbacks is defined
             OpenAIEmbeddings.model_rebuild()
             ChatOpenAI.model_rebuild()
             
-            print("✅ Successfully rebuilt Pydantic models with callbacks")
+            print("✅ Pydantic models rebuilt with Callbacks defined")
         except Exception as e:
-            print(f"⚠️  Warning: Could not rebuild models: {e}")
-            import traceback
-            print(f"Full traceback: {traceback.format_exc()}")
+            print(f"⚠️ Model rebuild failed: {e}")
+    
+    if embeddings is None:
+        embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+        print("✅ OpenAI Embeddings initialized")
         
-        # Initialize with proper parameters (as suggested by Claude UI)
-        try:
-            # Use the already stripped openai_key from above
-            embeddings = OpenAIEmbeddings(
-                model=EMBEDDING_MODEL,
-                openai_api_key=openai_key  # Use the stripped key
-            )
-            print(f"✅ OpenAI Embeddings initialized successfully with key: {openai_key[:10]}...")
-        except Exception as e:
-            print(f"❌ Failed to initialize embeddings: {e}")
-            raise
-            
     if llm is None:
-        try:
-            # Use the already stripped openai_key from above
-            llm = ChatOpenAI(
-                model=CHAT_MODEL,
-                temperature=0.1,
-                openai_api_key=openai_key,  # Use the stripped key
-                callbacks=[],  # Explicit empty callbacks as suggested
-                request_timeout=30,  # Add timeout for serverless
-                max_retries=2  # Reduce retries for faster failure
-            )
-            print(f"✅ ChatOpenAI initialized successfully with key: {openai_key[:10]}...")
-        except Exception as e:
-            print(f"❌ Failed to initialize ChatOpenAI: {e}")
-            raise
-            
+        llm = ChatOpenAI(
+            model=CHAT_MODEL, 
+            temperature=0.1,
+            request_timeout=30,
+            max_retries=2
+        )
+        print("✅ ChatOpenAI initialized")
+        
     if qdrant_client is None:
-        try:
-            # Get and validate Qdrant credentials (use the stripped versions from above)
-            # qdrant_url and qdrant_api_key are already set and stripped above
-            
-            qdrant_client = QdrantClient(
-                url=qdrant_url,
-                api_key=qdrant_api_key,
-                timeout=30  # Add timeout for serverless
-            )
-            print(f"✅ Qdrant client initialized successfully - URL: {qdrant_url}")
-        except Exception as e:
-            print(f"❌ Failed to initialize Qdrant: {e}")
-            raise
+        qdrant_client = QdrantClient(
+            url=os.environ.get("QDRANT_URL"),
+            api_key=os.environ.get("QDRANT_API_KEY"),
+            timeout=30
+        )
+        print("✅ Qdrant client initialized")
 
 # Define the state following the notebook pattern
 class InspectorRAGState(TypedDict):
@@ -172,41 +125,50 @@ def get_vector_store():
         embedding=embeddings,
     )
 
-# Tools for the agents
 @tool
 def search_inspector_standards(query: str) -> List[Dict[str, Any]]:
     """
-    Search through NC inspector standards, regulations, and building codes.
+    Optimized search through NC inspector standards, regulations, and building codes.
     Use this for questions about home inspection requirements, standards, or regulations.
     """
     try:
-        # Initialize clients if needed
         _initialize_clients()
         
-        # Use direct Qdrant search to preserve metadata properly
         query_embedding = embeddings.embed_query(query)
         
         search_result = qdrant_client.search(
             collection_name=COLLECTION_NAME,
             query_vector=query_embedding,
-            limit=5,
-            with_payload=True
+            limit=6,
+            with_payload=True,
+            score_threshold=0.7,  # Add minimum relevance threshold
+            search_params={"hnsw_ef": 128, "exact": False}  # Faster approximate search
         )
         
-        results = []
+        # Group by source for diversity
+        results_by_source = {}
         for hit in search_result:
-            # Extract metadata from Qdrant payload
             payload = hit.payload
-            results.append({
+            source = payload.get("source", "Unknown")
+            
+            if source not in results_by_source:
+                results_by_source[source] = []
+            
+            results_by_source[source].append({
                 "content": payload.get("content", ""),
-                "source": payload.get("source", "InterNACHI Standards of Practice"),  # Default fallback
+                "source": source,
                 "category": payload.get("category", "Standards"),
                 "score": float(hit.score),
-                "document_name": payload.get("document_name", payload.get("source", "InterNACHI Standards of Practice"))
+                "type": "regulatory"  # Ready for multi-source
             })
-            print(f"🔍 Retrieved: {payload.get('source', 'Unknown source')} (score: {hit.score:.3f})")
         
-        return results
+        # Take max 2 results per source for diversity
+        final_results = []
+        for source_results in results_by_source.values():
+            final_results.extend(source_results[:2])
+        
+        return sorted(final_results, key=lambda x: x["score"], reverse=True)[:5]
+        
     except Exception as e:
         print(f"❌ Search error: {e}")
         return [{"error": f"Search failed: {str(e)}"}]
@@ -375,13 +337,15 @@ def research_node(state: InspectorRAGState) -> InspectorRAGState:
                     metadata={
                         "source": result_item["source"],
                         "category": result_item.get("category", "Unknown"),
-                        "score": result_item["score"]
+                        "score": result_item["score"],
+                        "type": "regulatory"  # Add for future multi-source synthesis
                     }
                 )
                 context_docs.append(doc)
                 sources.append({
                     "source": result_item["source"],
-                    "score": result_item["score"]
+                    "score": result_item["score"],
+                    "type": "regulatory"  # Add this too
                 })
         
         # Signal that research is complete and synthesis should begin
@@ -414,11 +378,30 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
         # Ensure clients are initialized
         _initialize_clients()
         
-        # Skip the slow react agent - use LLM directly
-        context_text = "\n\n".join([
-            f"Source: {doc.metadata.get('source', 'Unknown')}\nContent: {doc.page_content}"
-            for doc in state.get("context", [])
-        ])
+        # Group context by source type (ready for regulatory + articles)
+        regulatory_docs = [doc for doc in state.get("context", []) 
+                          if doc.metadata.get("type") == "regulatory"]
+        article_docs = [doc for doc in state.get("context", []) 
+                       if doc.metadata.get("type") == "article"]
+        
+        # Build structured context
+        context_parts = []
+        
+        if regulatory_docs:
+            reg_content = "\n\n".join([
+                f"Source: {doc.metadata.get('source', 'Unknown')}\n{doc.page_content}"
+                for doc in regulatory_docs[:4]
+            ])
+            context_parts.append(f"REGULATORY SOURCES:\n{reg_content}")
+        
+        if article_docs:  # Future: when Firecrawl is added
+            article_content = "\n\n".join([
+                f"Source: {doc.metadata.get('source', 'Unknown')}\n{doc.page_content}"
+                for doc in article_docs[:3]
+            ])
+            context_parts.append(f"RECENT ARTICLES:\n{article_content}")
+        
+        context_text = "\n\n".join(context_parts) if context_parts else "No relevant context found."
         
         synthesis_prompt = f"""You are a North Carolina home inspection expert. Based on the following research about "{state['question']}":
 

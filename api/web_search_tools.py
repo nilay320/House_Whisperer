@@ -25,6 +25,13 @@ def get_tavily_client():
         raise ValueError("TAVILY_API_KEY not found in environment variables")
     return TavilyClient(api_key=api_key)
 
+# Score threshold configuration
+# Tavily scores range from 0.0 to 1.0
+# - 0.7+ = Highly relevant
+# - 0.5-0.7 = Moderately relevant  
+# - Below 0.5 = Less relevant (filtered by default)
+DEFAULT_MIN_SCORE = 0.5
+
 # Domain configuration for home inspection sources
 TRUSTED_DOMAINS = [
     "nachi.org",           # InterNACHI
@@ -79,13 +86,17 @@ async def tavily_search_async(
         # Format results similar to Deep Research
         formatted_results = []
         for result in response.get('results', []):
+            score = result.get('score', 0.0)
+            # Log scores for debugging
+            logger.info(f"   Score: {score:.3f} - {result.get('title', '')[:50]}...")
+            
             formatted_results.append({
                 "query": query,
                 "title": result.get('title', ''),
                 "url": result.get('url', ''),
                 "content": result.get('content', ''),
                 "raw_content": result.get('raw_content', result.get('content', '')),
-                "score": result.get('score', 0.0),
+                "score": score,
                 "source": extract_source_name(result.get('url', '')),
                 "fetched_at": datetime.now().isoformat()
             })
@@ -122,7 +133,8 @@ def extract_source_name(url: str) -> str:
 
 def deduplicate_and_format_sources(
     search_results: List[Dict[str, Any]],
-    max_length: int = 2000
+    max_length: int = 2000,
+    min_score: float = 0.5
 ) -> List[Dict[str, Any]]:
     """
     Deduplicate and format search results.
@@ -134,6 +146,13 @@ def deduplicate_and_format_sources(
     
     for result in search_results:
         url = result.get('url', '')
+        score = result.get('score', 0.0)
+        
+        # Apply score threshold
+        if score < min_score:
+            logger.info(f"   Filtered out low score ({score:.3f}): {result.get('title', '')[:50]}...")
+            continue
+            
         if url and url not in seen_urls:
             seen_urls.add(url)
             
@@ -153,7 +172,8 @@ def deduplicate_and_format_sources(
 @tool
 def search_web_for_inspection_info(
     query: str,
-    max_results: int = 5
+    max_results: int = 5,
+    min_score: float = 0.5
 ) -> List[Dict[str, Any]]:
     """
     Search the web for home inspection information.
@@ -165,9 +185,12 @@ def search_web_for_inspection_info(
     Args:
         query: Search query related to home inspection
         max_results: Maximum number of results to return (default 5)
+        min_score: Minimum relevance score threshold (0.0-1.0, default 0.5)
+                   Results below this score are filtered out
     
     Returns:
         List of search results with title, content, URL, and relevance score
+        Only includes results with score >= min_score
     """
     try:
         # Run async search in sync context
@@ -177,8 +200,8 @@ def search_web_for_inspection_info(
             tavily_search_async(query, max_results)
         )
         
-        # Deduplicate and format
-        formatted_results = deduplicate_and_format_sources(results)
+        # Deduplicate and format with score filtering
+        formatted_results = deduplicate_and_format_sources(results, min_score=min_score)
         
         # Convert to format expected by LangGraph
         return [{

@@ -469,7 +469,9 @@ async def health_check():
         "env_lengths": {
             "OPENAI_KEY_LEN": len(os.getenv("OPENAI_API_KEY", "")),
             "QDRANT_URL_LEN": len(os.getenv("QDRANT_URL", "")),
-            "QDRANT_KEY_LEN": len(os.getenv("QDRANT_API_KEY", ""))
+            "QDRANT_KEY_LEN": len(os.getenv("QDRANT_API_KEY", "")),
+            "QDRANT_URL_LAST": repr(os.getenv("QDRANT_URL", "")[-5:]) if os.getenv("QDRANT_URL") else "none",
+            "QDRANT_KEY_LAST": os.getenv("QDRANT_API_KEY", "")[-10:] if os.getenv("QDRANT_API_KEY") else "none"
         },
         "services": {
             "qdrant": qdrant_status,

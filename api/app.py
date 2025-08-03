@@ -382,6 +382,13 @@ async def test_rag():
     """Test RAG components individually."""
     results = {}
     
+    # Test 0: Environment variables
+    results["env_check"] = {
+        "OPENAI_KEY": f"{len(os.getenv('OPENAI_API_KEY', ''))} chars, ends with: {repr(os.getenv('OPENAI_API_KEY', '')[-5:])}",
+        "QDRANT_URL": f"{len(os.getenv('QDRANT_URL', ''))} chars, ends with: {repr(os.getenv('QDRANT_URL', '')[-5:])}",
+        "QDRANT_KEY": f"{len(os.getenv('QDRANT_API_KEY', ''))} chars, ends with: {repr(os.getenv('QDRANT_API_KEY', '')[-5:])}"
+    }
+    
     # Test 1: Search function
     try:
         from langgraph_inspector_rag import _initialize_clients, search_inspector_standards

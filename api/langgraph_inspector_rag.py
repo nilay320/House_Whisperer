@@ -32,6 +32,13 @@ COLLECTION_NAME = 'inspector-standards'
 EMBEDDING_MODEL = 'text-embedding-3-small'
 CHAT_MODEL = 'gpt-4o-mini'
 
+# Strip whitespace from environment variables on module load
+for key in ['OPENAI_API_KEY', 'QDRANT_URL', 'QDRANT_API_KEY']:
+    value = os.environ.get(key)
+    if value:
+        os.environ[key] = value.strip()
+        print(f"✅ Stripped whitespace from {key}")
+
 # Initialize clients (will be done inside functions to avoid import-time errors)
 embeddings = None
 llm = None
@@ -106,36 +113,28 @@ def _initialize_clients():
         
         # Initialize with proper parameters (as suggested by Claude UI)
         try:
-            # Ensure we have the API key
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY not found in environment")
-                
+            # Use the already stripped openai_key from above
             embeddings = OpenAIEmbeddings(
                 model=EMBEDDING_MODEL,
-                openai_api_key=api_key
+                openai_api_key=openai_key  # Use the stripped key
             )
-            print(f"✅ OpenAI Embeddings initialized successfully with key: {api_key[:10]}...")
+            print(f"✅ OpenAI Embeddings initialized successfully with key: {openai_key[:10]}...")
         except Exception as e:
             print(f"❌ Failed to initialize embeddings: {e}")
             raise
             
     if llm is None:
         try:
-            # Ensure we have the API key
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY not found in environment")
-                
+            # Use the already stripped openai_key from above
             llm = ChatOpenAI(
                 model=CHAT_MODEL,
                 temperature=0.1,
-                openai_api_key=api_key,
+                openai_api_key=openai_key,  # Use the stripped key
                 callbacks=[],  # Explicit empty callbacks as suggested
                 request_timeout=30,  # Add timeout for serverless
                 max_retries=2  # Reduce retries for faster failure
             )
-            print(f"✅ ChatOpenAI initialized successfully with key: {api_key[:10]}...")
+            print(f"✅ ChatOpenAI initialized successfully with key: {openai_key[:10]}...")
         except Exception as e:
             print(f"❌ Failed to initialize ChatOpenAI: {e}")
             raise

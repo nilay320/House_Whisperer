@@ -29,8 +29,9 @@ def get_tavily_client():
 # Tavily scores range from 0.0 to 1.0
 # - 0.7+ = Highly relevant
 # - 0.5-0.7 = Moderately relevant  
-# - Below 0.5 = Less relevant (filtered by default)
-DEFAULT_MIN_SCORE = 0.5
+# - 0.3-0.5 = Somewhat relevant
+# - Below 0.3 = Less relevant
+DEFAULT_MIN_SCORE = 0.3  # Lowered to get more results
 
 # Domain configuration for home inspection sources
 TRUSTED_DOMAINS = [
@@ -83,6 +84,13 @@ async def tavily_search_async(
             exclude_domains=EXCLUDED_DOMAINS
         )
         
+        # Debug: Log raw response structure
+        logger.info(f"   Tavily returned {len(response.get('results', []))} raw results")
+        if response.get('results'):
+            first = response['results'][0]
+            logger.info(f"   First result keys: {list(first.keys())}")
+            logger.info(f"   Score value: {first.get('score', 'NO SCORE KEY')}")
+        
         # Format results similar to Deep Research
         formatted_results = []
         for result in response.get('results', []):
@@ -94,14 +102,20 @@ async def tavily_search_async(
                 "query": query,
                 "title": result.get('title', ''),
                 "url": result.get('url', ''),
-                "content": result.get('content', ''),
-                "raw_content": result.get('raw_content', result.get('content', '')),
+                "content": result.get('content', ''),  # Use content, not raw_content
+                "raw_content": None,  # Don't store raw_content to avoid confusion
                 "score": score,
                 "source": extract_source_name(result.get('url', '')),
                 "fetched_at": datetime.now().isoformat()
             })
         
         logger.info(f"✅ Found {len(formatted_results)} results")
+        
+        # Debug: Show what Tavily actually returned
+        if formatted_results:
+            logger.info(f"   First result score: {formatted_results[0].get('score', 'NO SCORE')}")
+            logger.info(f"   Content length: {len(formatted_results[0].get('content', ''))}")
+        
         return formatted_results
         
     except Exception as e:
@@ -156,14 +170,14 @@ def deduplicate_and_format_sources(
         if url and url not in seen_urls:
             seen_urls.add(url)
             
-            # Truncate content if needed
-            content = result.get('raw_content', result.get('content', ''))
+            # Use 'content' field which has the actual useful text, not 'raw_content' which has navigation
+            content = result.get('content', '')
             if len(content) > max_length:
                 content = content[:max_length] + "..."
             
             unique_results.append({
                 **result,
-                'content': content
+                'content': content  # This ensures we use the clean content, not raw HTML
             })
     
     # Sort by relevance score
@@ -173,7 +187,7 @@ def deduplicate_and_format_sources(
 def search_web_for_inspection_info(
     query: str,
     max_results: int = 5,
-    min_score: float = 0.5
+    min_score: float = 0.3
 ) -> List[Dict[str, Any]]:
     """
     Search the web for home inspection information.

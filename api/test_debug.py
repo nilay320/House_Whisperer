@@ -37,6 +37,7 @@ if result['success']:
     if result.get('sources'):
         print(f"\n📚 Sources:")
         for i, source in enumerate(result['sources'][:5], 1):
-            print(f"   {i}. {source.get('source', 'Unknown')} (type: {source.get('type', 'unknown')})")
+            score = source.get('score', 0.0) if isinstance(source.get('score'), (int, float)) else 0.0
+            print(f"   {i}. {source.get('source', 'Unknown')} (type: {source.get('type', 'unknown')}, score: {score:.3f})")
 
 print("\n✨ Debug test complete!")

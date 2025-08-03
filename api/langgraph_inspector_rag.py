@@ -473,7 +473,8 @@ def web_search_node(state: InspectorRAGState) -> InspectorRAGState:
             web_sources.append({
                 "source": doc.metadata.get("source", "Unknown"),
                 "url": doc.metadata.get("url", ""),
-                "type": doc.metadata.get("type", "web_resource")
+                "type": doc.metadata.get("type", "web_resource"),
+                "score": doc.metadata.get("score", 0.0)
             })
         
         return {

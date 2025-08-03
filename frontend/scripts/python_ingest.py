@@ -42,7 +42,7 @@ DOCUMENTS = {
         "category": "Regulations"
     },
     "NC_Codes": {
-        "path": "../../docs/data/ North Carolina Building & Inspection Codes /2024_nc_collection.pdf",
+        "path": "../../docs/data/North Carolina Building & Inspection Codes/2024_nc_collection.pdf",
         "source": "NC Building Codes 2024",
         "category": "Building Codes"
     }

@@ -437,10 +437,28 @@ Create a comprehensive, well-organized response that addresses the question thor
             
             response = response_message.content if hasattr(response_message, 'content') else str(response_message)
         except Exception as llm_error:
-            import traceback
-            print(f"❌ LLM call failed: {llm_error}")
-            print(f"❌ LLM error type: {type(llm_error).__name__}")
-            print(f"❌ Full traceback: {traceback.format_exc()}")
+            # Try direct OpenAI client as fallback
+            try:
+                print(f"⚠️ LangChain failed, trying direct OpenAI client...")
+                from openai import OpenAI
+                api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+                if api_key:
+                    client = OpenAI(api_key=api_key)
+                    completion = client.chat.completions.create(
+                        model=CHAT_MODEL,
+                        messages=[{"role": "user", "content": synthesis_prompt}],
+                        temperature=0.1
+                    )
+                    response = completion.choices[0].message.content
+                    print(f"✅ Direct OpenAI client succeeded")
+                else:
+                    raise ValueError("No OpenAI API key available")
+            except Exception as direct_error:
+                import traceback
+                print(f"❌ Both LangChain and direct OpenAI failed")
+                print(f"❌ LangChain error: {llm_error}")
+                print(f"❌ Direct error: {direct_error}")
+                print(f"❌ Full traceback: {traceback.format_exc()}")
             
             # Check if it's an API key issue
             if "api_key" in str(llm_error).lower() or "unauthorized" in str(llm_error).lower():

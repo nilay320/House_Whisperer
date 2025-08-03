@@ -377,15 +377,66 @@ Please answer the question based on the context provided. If the context doesn't
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
 
+@app.get("/api/test-rag")
+async def test_rag():
+    """Test RAG components individually."""
+    results = {}
+    
+    # Test 1: Search function
+    try:
+        from langgraph_inspector_rag import search_inspector_standards
+        search_results = search_inspector_standards("electrical clearance")
+        results["search"] = {
+            "status": "success",
+            "count": len(search_results),
+            "sample": search_results[0] if search_results else None
+        }
+    except Exception as e:
+        results["search"] = {"status": "error", "error": str(e)[:200]}
+    
+    # Test 2: OpenAI connection
+    try:
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            temperature=0
+        )
+        response = llm.invoke("Say 'test successful'")
+        results["openai"] = {"status": "success", "response": response.content[:50]}
+    except Exception as e:
+        results["openai"] = {"status": "error", "error": str(e)[:200]}
+    
+    return results
+
 # Define a health check endpoint to verify API status
 @app.get("/api/health")
 async def health_check():
+    # Test Qdrant connection
+    qdrant_status = "unknown"
+    qdrant_error = None
+    try:
+        from qdrant_client import QdrantClient
+        client = QdrantClient(
+            url=os.getenv("QDRANT_URL"),
+            api_key=os.getenv("QDRANT_API_KEY")
+        )
+        collections = client.get_collections()
+        qdrant_status = f"connected ({len(collections.collections)} collections)"
+    except Exception as e:
+        qdrant_status = "error"
+        qdrant_error = str(e)[:100]
+    
     return {
         "status": "ok",
         "env_vars": {
             "OPENAI_API_KEY": "set" if os.getenv("OPENAI_API_KEY") else "not set",
             "QDRANT_URL": "set" if os.getenv("QDRANT_URL") else "not set", 
             "QDRANT_API_KEY": "set" if os.getenv("QDRANT_API_KEY") else "not set"
+        },
+        "services": {
+            "qdrant": qdrant_status,
+            "qdrant_error": qdrant_error
         },
         "debug": {
             "total_env_vars": len(os.environ),

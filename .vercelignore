@@ -1,0 +1,4 @@
+docs/
+mobile-app/
+*.md
+.DS_Store

@@ -324,6 +324,9 @@ def research_node(state: InspectorRAGState) -> InspectorRAGState:
     try:
         print(f"🔍 Fast research starting for: {state['question']}")
         
+        # Ensure clients are initialized
+        _initialize_clients()
+        
         # Skip the slow react agent - call search directly
         search_start = time.time()
         search_results = search_inspector_standards(state["question"])
@@ -377,6 +380,9 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
     try:
         print(f"✍️ Fast synthesis starting...")
         
+        # Ensure clients are initialized
+        _initialize_clients()
+        
         # Skip the slow react agent - use LLM directly
         context_text = "\n\n".join([
             f"Source: {doc.metadata.get('source', 'Unknown')}\nContent: {doc.page_content}"
@@ -391,12 +397,16 @@ Create a comprehensive, well-organized response that addresses the question thor
 
         # Use LLM directly instead of react agent
         llm_start = time.time()
-        messages = [HumanMessage(content=synthesis_prompt)]
-        response_message = llm.invoke(messages)
-        llm_time = time.time() - llm_start
-        print(f"✍️ Direct LLM call took {llm_time:.2f}s")
-        
-        response = response_message.content if hasattr(response_message, 'content') else str(response_message)
+        try:
+            messages = [HumanMessage(content=synthesis_prompt)]
+            response_message = llm.invoke(messages)
+            llm_time = time.time() - llm_start
+            print(f"✍️ Direct LLM call took {llm_time:.2f}s")
+            
+            response = response_message.content if hasattr(response_message, 'content') else str(response_message)
+        except Exception as llm_error:
+            print(f"❌ LLM call failed: {llm_error}")
+            response = f"I apologize, but I'm experiencing a connection error with the AI service. However, based on the research I found:\n\n{context_text[:500]}...\n\nPlease try your question again in a moment."
         
         # Signal that synthesis is complete and workflow should finish
         total_synthesis_time = time.time() - synthesis_start

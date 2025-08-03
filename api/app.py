@@ -19,14 +19,8 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', 'frontend', '.env.loca
 import PyPDF2
 from io import BytesIO
 
-# Import our LangGraph RAG system
-try:
-    from langgraph_inspector_rag import query_inspector_rag
-    LANGGRAPH_AVAILABLE = True
-    print("✅ LangGraph Inspector RAG system loaded successfully")
-except ImportError as e:
-    LANGGRAPH_AVAILABLE = False
-    print(f"❌ Warning: LangGraph Inspector RAG not available: {e}")
+# Import our LangGraph RAG system - delay import to avoid initialization issues
+LANGGRAPH_AVAILABLE = True
 
 # Standard imports for JSON handling
 import json
@@ -95,8 +89,12 @@ async def rag_chat(request: RAGChatRequest):
                 "status": "success"
             }
         
-        # Import here to avoid circular imports
-        from langgraph_inspector_rag import query_inspector_rag_streaming
+        # Import here to avoid circular imports and initialization issues
+        try:
+            from langgraph_inspector_rag import query_inspector_rag_streaming
+        except ImportError as e:
+            print(f"❌ Failed to import LangGraph: {e}")
+            raise HTTPException(status_code=500, detail=f"LangGraph import failed: {str(e)}")
         
         async def generate_stream():
             """Generate SSE stream with progress updates."""

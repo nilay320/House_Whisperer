@@ -30,8 +30,11 @@ app = FastAPI(title="OpenAI Chat API")
 
 # Get OpenAI API key from environment variable
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+print(f"🔑 OPENAI_API_KEY loaded: {'Yes' if OPENAI_API_KEY else 'No'}")
+print(f"🔑 Key preview: {OPENAI_API_KEY[:10] if OPENAI_API_KEY else 'Not set'}...")
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY environment variable is not set")
+    print("❌ OPENAI_API_KEY not found in environment")
+    print(f"❌ Available env vars: {list(os.environ.keys())}")
 
 # Get allowed origins from environment variable or use defaults
 # Include Vercel preview URLs and production URL
@@ -377,7 +380,18 @@ Please answer the question based on the context provided. If the context doesn't
 # Define a health check endpoint to verify API status
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "env_vars": {
+            "OPENAI_API_KEY": "set" if os.getenv("OPENAI_API_KEY") else "not set",
+            "QDRANT_URL": "set" if os.getenv("QDRANT_URL") else "not set", 
+            "QDRANT_API_KEY": "set" if os.getenv("QDRANT_API_KEY") else "not set"
+        },
+        "debug": {
+            "total_env_vars": len(os.environ),
+            "vercel_region": os.getenv("VERCEL_REGION", "unknown")
+        }
+    }
 
 # Entry point for running the application directly
 if __name__ == "__main__":

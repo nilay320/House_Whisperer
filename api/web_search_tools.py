@@ -66,12 +66,13 @@ async def tavily_search_async(
         logger.info(f"🔍 Searching web for: {enhanced_query}")
         
         # Perform search with domain filtering
+        # Note: Removing domain restrictions might get better content
         response = client.search(
             query=enhanced_query,
-            max_results=max_results,
+            max_results=max_results * 2,  # Get more results to filter
             include_raw_content=include_raw_content,
             search_depth=search_depth,
-            include_domains=TRUSTED_DOMAINS,
+            # include_domains=TRUSTED_DOMAINS,  # Temporarily disabled for better results
             exclude_domains=EXCLUDED_DOMAINS
         )
         

@@ -141,7 +141,7 @@ def search_inspector_standards(query: str) -> List[Dict[str, Any]]:
             query_vector=query_embedding,
             limit=6,
             with_payload=True,
-            score_threshold=0.7,  # Add minimum relevance threshold
+            score_threshold=0.6,  # Add minimum relevance threshold
             search_params={"hnsw_ef": 128, "exact": False}  # Faster approximate search
         )
         
@@ -162,10 +162,10 @@ def search_inspector_standards(query: str) -> List[Dict[str, Any]]:
                 "type": "regulatory"  # Ready for multi-source
             })
         
-        # Take max 2 results per source for diversity
+        # Take max 3 results per source for diversity
         final_results = []
         for source_results in results_by_source.values():
-            final_results.extend(source_results[:2])
+            final_results.extend(source_results[:3])
         
         return sorted(final_results, key=lambda x: x["score"], reverse=True)[:5]
         
@@ -390,7 +390,7 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
         if regulatory_docs:
             reg_content = "\n\n".join([
                 f"Source: {doc.metadata.get('source', 'Unknown')}\n{doc.page_content}"
-                for doc in regulatory_docs[:4]
+                for doc in regulatory_docs[:6]
             ])
             context_parts.append(f"REGULATORY SOURCES:\n{reg_content}")
         
@@ -403,11 +403,33 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
         
         context_text = "\n\n".join(context_parts) if context_parts else "No relevant context found."
         
-        synthesis_prompt = f"""You are a North Carolina home inspection expert. Based on the following research about "{state['question']}":
+        synthesis_prompt = f"""You are a North Carolina home inspection expert. Answer the question using ONLY the provided research context.
 
-{context_text}
+        QUESTION: {state['question']}
 
-Create a comprehensive, well-organized response that addresses the question thoroughly. Include specific requirements, standards, and procedures where applicable. Format your response professionally for working home inspectors."""
+        RESEARCH CONTEXT:
+        {context_text}
+
+        INSTRUCTIONS:
+        - Answer ONLY based on the provided context above
+        - If the context doesn't contain enough information to answer the question, say "I don't have enough information in the provided sources to answer this question"
+        - Do not use external knowledge beyond what's provided
+        - Include specific requirements, standards, and procedures from the sources
+        - Cite which sources you're referencing
+        - Format professionally for working home inspectors
+        - Keep response focused and relevant to the question"""
+
+#on 2
+#     # - If the context doesn't contain enough information to answer the question, say "I don't have enough information in the provided sources to answer this question"
+
+#         synthesis_prompt = f"""You are a North Carolina home inspection expert. Based on the following research about "{state['question']}":
+
+# {context_text}
+
+# Create a comprehensive, well-organized response that addresses the question thoroughly. 
+# Include specific requirements, standards, and procedures where applicable. 
+# Format your response professionally for working home inspectors.
+# Can you cite the sources you used at the end?"""
 
         # Use LLM directly instead of react agent
         llm_start = time.time()

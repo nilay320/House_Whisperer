@@ -1,7 +1,205 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, X, MessageCircle, FileText, User, Bot } from 'lucide-react';
+import { Send, X, MessageCircle, FileText, User, Bot, ChevronDown, ChevronUp, BookOpen, CheckCircle } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+// Custom markdown components for better formatting
+const markdownComponents = {
+  // Headers
+  h1: ({ children }) => <h1 className="text-2xl font-bold mb-3 mt-4">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-xl font-semibold mb-2 mt-3">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-2">{children}</h3>,
+  h4: ({ children }) => <h4 className="text-base font-semibold mb-1 mt-2">{children}</h4>,
+  
+  // Paragraphs and text
+  p: ({ children }) => <p className="mb-3 leading-relaxed">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+  em: ({ children }) => <em className="italic">{children}</em>,
+  
+  // Lists
+  ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
+  li: ({ children }) => <li className="ml-2">{children}</li>,
+  
+  // Code
+  code: ({ inline, children }) => {
+    if (inline) {
+      return <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>;
+    }
+    return (
+      <pre className="bg-gray-100 p-3 rounded-lg overflow-x-auto mb-3">
+        <code className="text-sm font-mono">{children}</code>
+      </pre>
+    );
+  },
+  
+  // Blockquotes
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-blue-500 pl-4 my-3 italic text-gray-700">
+      {children}
+    </blockquote>
+  ),
+  
+  // Tables
+  table: ({ children }) => (
+    <div className="overflow-x-auto mb-3">
+      <table className="min-w-full border-collapse border border-gray-300">
+        {children}
+      </table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="border border-gray-300 px-3 py-2 bg-gray-100 font-semibold text-left">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-gray-300 px-3 py-2">
+      {children}
+    </td>
+  ),
+};
+
+// Component for displaying sources in a structured way
+const SourcesDisplay = ({ sources }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  if (!sources || sources.length === 0) return null;
+  
+  // Group sources by type
+  const sourcesByType = sources.reduce((acc, source) => {
+    const type = source.source?.includes('InterNACHI') ? 'InterNACHI Standards' :
+                  source.source?.includes('NCHILB') ? 'NC Licensure Board' :
+                  source.source?.includes('NC Building Codes') ? 'NC Building Codes' :
+                  'Other Sources';
+    
+    if (!acc[type]) acc[type] = [];
+    acc[type].push(source);
+    return acc;
+  }, {});
+  
+  return (
+    <div className="mt-4 border-t pt-4">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <BookOpen size={16} />
+          Sources ({sources.length})
+        </span>
+        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+      
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="mt-3 space-y-3"
+          >
+            {Object.entries(sourcesByType).map(([type, typeSources]) => (
+              <div key={type} className="bg-gray-50 rounded-lg p-3">
+                <h5 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                  <CheckCircle size={14} className="text-green-600" />
+                  {type}
+                </h5>
+                <div className="space-y-2">
+                  {typeSources.map((source, idx) => (
+                    <div key={idx} className="text-xs text-gray-600 ml-5">
+                      <div className="flex items-start gap-2">
+                        <span className="text-gray-400">•</span>
+                        <div>
+                          <span className="font-medium">{source.source}</span>
+                          <span className="ml-2 text-gray-500">
+                            (Relevance: {(source.score * 100).toFixed(0)}%)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+// Component for rendering bot messages with markdown and sources
+const BotMessage = ({ content, sources, timestamp }) => {
+  // Separate timing info and sources from main content
+  const contentParts = content.split('\n\n⏱️');
+  const mainContent = contentParts[0];
+  const timingInfo = contentParts[1] ? contentParts[1].split('\n\n📚')[0] : null;
+  
+  // Extract sources if they're in the content
+  let extractedSources = sources;
+  if (!extractedSources && content.includes('📚 Sources:')) {
+    const sourcesMatch = content.match(/📚 Sources:([\s\S]*?)(?:\n\n|$)/);
+    if (sourcesMatch) {
+      extractedSources = [];
+      const sourceLines = sourcesMatch[1].trim().split('\n');
+      sourceLines.forEach(line => {
+        const match = line.match(/• (.+?) \(relevance: (\d+\.?\d*)%\)/);
+        if (match) {
+          extractedSources.push({
+            source: match[1],
+            score: parseFloat(match[2]) / 100
+          });
+        }
+      });
+    }
+  }
+  
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[85%] rounded-2xl bg-gray-100 text-gray-800 px-4 py-3">
+        <div className="flex items-start space-x-2">
+          <Bot size={16} className="mt-1 text-blue-600 flex-shrink-0" />
+          <div className="flex-1">
+            <div className="prose prose-sm max-w-none">
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm]}
+                components={markdownComponents}
+              >
+                {mainContent}
+              </ReactMarkdown>
+            </div>
+            
+            {timingInfo && (
+              <div className="mt-3 text-xs text-gray-500 flex items-center gap-2">
+                <span>⏱️</span>
+                <span>{timingInfo.replace('**Response Time:', '').replace('**', '').trim()}</span>
+              </div>
+            )}
+            
+            {extractedSources && extractedSources.length > 0 && (
+              <SourcesDisplay sources={extractedSources} />
+            )}
+            
+            <p className="text-xs opacity-70 mt-2">
+              {formatTime(timestamp)}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const formatTime = (timestamp) => {
+  return timestamp.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
 const ChatbotWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -9,7 +207,7 @@ const ChatbotWidget = () => {
     {
       id: 1,
       type: 'bot',
-      content: 'Hello! I\'m your Home Inspector AI Assistant. I can help you with questions about InterNACHI standards, NCHILB regulations, and inspection best practices. Ask me anything about proper inspection procedures, code requirements, or compliance standards. How can I help you today?',
+      content: 'Hello! I\'m your **NC Home Inspector AI Assistant**. I can help you with:\n\n• InterNACHI standards and best practices\n• NCHILB regulations and requirements\n• NC building codes and amendments\n• Inspection procedures and compliance\n\nWhat would you like to know about North Carolina home inspection standards?',
       timestamp: new Date(),
     },
   ]);
@@ -75,11 +273,12 @@ const ChatbotWidget = () => {
     },
   });
 
-  const addMessage = (type, content) => {
+  const addMessage = (type, content, sources = null) => {
     const newMessage = {
       id: Date.now(),
       type,
       content,
+      sources,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, newMessage]);
@@ -215,18 +414,10 @@ const ChatbotWidget = () => {
                     // Add timing info
                     finalResponse += `\n\n⏱️ **Response Time: ${totalTime.toFixed(1)} seconds**`;
                     
-                    // Add sources if available
-                    if (responseSources && responseSources.length > 0) {
-                      const sourcesText = '\n\n📚 Sources:\n' + responseSources.map(s => 
-                        `• ${s.source} (relevance: ${(s.score * 100).toFixed(1)}%)`
-                      ).join('\n');
-                      finalResponse += sourcesText;
-                    }
-                    
-                    // Update the bot message with final response including timing and sources
+                    // Update the bot message with final response and sources separately
                     setMessages(prev => prev.map(msg => 
                       msg.id === currentBotMessageId 
-                        ? { ...msg, content: finalResponse }
+                        ? { ...msg, content: finalResponse, sources: responseSources }
                         : msg
                     ));
                     
@@ -278,13 +469,6 @@ const ChatbotWidget = () => {
     }
   };
 
-  const formatTime = (timestamp) => {
-    return timestamp.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   const removePdf = () => {
     setUploadedPdf(null);
     addMessage('user', 'Removed uploaded PDF');
@@ -322,7 +506,7 @@ const ChatbotWidget = () => {
         </AnimatePresence>
       </motion.button>
 
-      {/* Chat Widget */}
+      {/* Chat Widget - Increased size */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -330,7 +514,7 @@ const ChatbotWidget = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-24 right-6 z-40 w-96 h-[500px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"
+            className="fixed bottom-24 right-6 z-40 w-[600px] h-[650px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl">
@@ -339,8 +523,8 @@ const ChatbotWidget = () => {
                   <Bot size={16} />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Home Inspection AI</h3>
-                  <p className="text-xs text-blue-100">Ask me anything about your report</p>
+                  <h3 className="font-semibold">NC Home Inspector AI</h3>
+                  <p className="text-xs text-blue-100">InterNACHI • NCHILB • NC Building Codes</p>
                 </div>
               </div>
               <button
@@ -358,30 +542,28 @@ const ChatbotWidget = () => {
                   key={message.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                      message.type === 'user'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    <div className="flex items-start space-x-2">
-                      {message.type === 'bot' && (
-                        <Bot size={16} className="mt-1 text-blue-600 flex-shrink-0" />
-                      )}
-                      <div className="flex-1">
-                        <p className="text-sm leading-relaxed">{message.content}</p>
-                        <p className="text-xs opacity-70 mt-2">
-                          {formatTime(message.timestamp)}
-                        </p>
+                  {message.type === 'bot' ? (
+                    <BotMessage 
+                      content={message.content} 
+                      sources={message.sources}
+                      timestamp={message.timestamp}
+                    />
+                  ) : (
+                    <div className="flex justify-end">
+                      <div className="max-w-[85%] rounded-2xl bg-blue-600 text-white px-4 py-3">
+                        <div className="flex items-start space-x-2">
+                          <div className="flex-1">
+                            <p className="text-sm leading-relaxed">{message.content}</p>
+                            <p className="text-xs opacity-70 mt-2">
+                              {formatTime(message.timestamp)}
+                            </p>
+                          </div>
+                          <User size={16} className="mt-1 text-blue-100 flex-shrink-0" />
+                        </div>
                       </div>
-                      {message.type === 'user' && (
-                        <User size={16} className="mt-1 text-blue-100 flex-shrink-0" />
-                      )}
                     </div>
-                  </div>
+                  )}
                 </motion.div>
               ))}
 
@@ -407,15 +589,15 @@ const ChatbotWidget = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Info Section - No PDF Upload Needed */}
+            {/* Info Section - Enhanced */}
             <div className="px-4 pb-2">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="flex items-center space-x-2">
-                  <Bot size={16} className="text-blue-600" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium">NC Inspector AI Assistant</p>
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-start space-x-2">
+                  <BookOpen size={16} className="text-blue-600 mt-0.5" />
+                  <div className="text-sm text-blue-800 flex-1">
+                    <p className="font-medium">NC Inspector Knowledge Base</p>
                     <p className="text-xs text-blue-600 mt-1">
-                      Ask questions about NC building codes, inspection standards, and licensing requirements
+                      Powered by InterNACHI SOP, NCHILB regulations, and 2024 NC Building Codes
                     </p>
                   </div>
                 </div>
@@ -431,7 +613,7 @@ const ChatbotWidget = () => {
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder="Ask about your inspection report..."
+                    placeholder="Ask about inspection standards, codes, or regulations..."
                     className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows={1}
                     style={{ minHeight: '40px', maxHeight: '120px' }}
@@ -453,4 +635,4 @@ const ChatbotWidget = () => {
   );
 };
 
-export default ChatbotWidget; 
+export default ChatbotWidget;

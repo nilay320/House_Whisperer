@@ -325,10 +325,13 @@ Choose from: research_agent, synthesis_agent, FINISH"""),
             has_web_results = bool(state.get("web_results"))
             
             # Routing logic
+            # Check if we've already done research
+            has_done_research = "context" in state
+            
             # If no research done yet, always do research first
-            if not state.get("context") and not state.get("web_results"):
+            if not has_done_research:
                 next_agent = "research_agent"
-                print("🤖 Supervisor decision: No context -> research_agent")
+                print("🤖 Supervisor decision: No research done yet -> research_agent")
             # After research, check if we should also do web search
             elif should_search_web and not has_web_results:
                 next_agent = "web_search_agent"
@@ -367,7 +370,7 @@ def research_node(state: InspectorRAGState) -> InspectorRAGState:
         
         # Skip the slow react agent - call search directly
         search_start = time.time()
-        search_results = search_inspector_standards(state["question"])
+        search_results = search_inspector_standards.invoke({"query": state["question"]})
         search_time = time.time() - search_start
         print(f"🔍 Direct search completed in {search_time:.2f}s")
         

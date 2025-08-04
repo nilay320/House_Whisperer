@@ -71,8 +71,9 @@ const SourcesDisplay = ({ sources }) => {
   // Group sources by type
   const sourcesByType = sources.reduce((acc, source) => {
     const type = source.source?.includes('InterNACHI') ? 'InterNACHI Standards' :
-                  source.source?.includes('NCHILB') ? 'NC Licensure Board' :
-                  source.source?.includes('NC Building Codes') ? 'NC Building Codes' :
+                  source.source?.includes('NCHILB') || source.source?.includes('NC Home Inspector Licensure Board') ? 'NC Licensure Board' :
+                  source.source?.includes('NC Building Codes') || source.source?.includes('Building Code') ? 'NC Building Codes' :
+                  source.type === 'web_resource' ? 'Web Resources' :
                   'Other Sources';
     
     if (!acc[type]) acc[type] = [];

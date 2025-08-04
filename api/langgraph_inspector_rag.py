@@ -550,7 +550,7 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
         - If no relevant information is found, say "I couldn't find relevant information in the available sources"
         - Include specific details, standards, and procedures from the sources
         - Cite which sources you're referencing, including URLs for web resources when relevant
-        - For recall information, list any specific recalls found with manufacturer and model details
+        - When presenting information from web sources, include key details and findings
         - Format professionally for working home inspectors
         - Keep response focused and relevant to the question"""
 

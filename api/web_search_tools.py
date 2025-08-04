@@ -300,6 +300,7 @@ def search_for_recalls(
                 "source": f"Recall Notice: {result.get('title', '')}",
                 "url": result.get('url', ''),
                 "type": "recall_notice",
+                "score": result.get('score', 1.0),  # Recalls are highly relevant by default
                 "product": product_name,
                 "date": extract_date_from_content(result.get('content', ''))
             })

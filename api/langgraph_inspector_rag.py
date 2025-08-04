@@ -25,7 +25,7 @@ from langgraph.prebuilt import create_react_agent
 from qdrant_client import QdrantClient
 
 # Import web search tools
-from web_search_tools import search_web_for_inspection_info, search_for_recalls
+from web_search_tools import search_web_for_inspection_info
 
 # Load environment variables
 load_dotenv()
@@ -265,7 +265,7 @@ Use the available search tools to find relevant, current information that comple
 
     web_search_agent = create_react_agent(
         llm,
-        [search_web_for_inspection_info, search_for_recalls],
+        [search_web_for_inspection_info],
         state_modifier=system_prompt
     )
     
@@ -442,12 +442,6 @@ def web_search_node(state: InspectorRAGState) -> InspectorRAGState:
         
         # Direct web search using the tool
         web_results = search_web_for_inspection_info.invoke({"query": state["question"]})
-        
-        # Check if we need recall information
-        if any(word in state["question"].lower() for word in ["recall", "defect", "dangerous", "safety"]):
-            # Extract product/manufacturer from question (simple approach)
-            recall_results = search_for_recalls.invoke({"product_name": state["question"]})
-            web_results.extend(recall_results)
         
         # Convert to Documents for consistency
         web_docs = []

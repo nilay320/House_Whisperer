@@ -73,7 +73,7 @@ const SourcesDisplay = ({ sources }) => {
     const type = source.source?.includes('InterNACHI') ? 'InterNACHI Standards' :
                   source.source?.includes('NCHILB') || source.source?.includes('NC Home Inspector Licensure Board') ? 'NC Licensure Board' :
                   source.source?.includes('NC Building Codes') || source.source?.includes('Building Code') ? 'NC Building Codes' :
-                  source.type === 'web_resource' || source.type === 'recall_notice' ? 'Web Resources' :
+                  source.type === 'web_resource' ? 'Web Resources' :
                   source.type === 'regulatory' ? 'Regulatory Standards' :
                   'Other Sources';
     

@@ -1,8 +1,4 @@
 {
-  "functions": {
-    "api/chat.py": {
-      "maxDuration": 30
-    }
-  },
-  "public": true
+  "public": true,
+  "framework": "create-react-app"
 }

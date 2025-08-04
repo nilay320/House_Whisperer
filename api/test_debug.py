@@ -18,8 +18,8 @@ from langgraph_inspector_rag import query_inspector_rag
 
 print("🧪 Testing single query with debug output\n")
 
-# Test with a query that should trigger web search
-query = "What are the latest best practices for inspecting Federal Pacific panels?"
+# Test with a query that should use vector DB first
+query = "What is the required clearance for electrical panels?"
 print(f"📝 Query: {query}")
 
 # Run with limited recursion to avoid timeouts

@@ -207,12 +207,41 @@ def search_web_for_inspection_info(
         Only includes results with score >= min_score
     """
     try:
-        # Run async search in sync context
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        results = loop.run_until_complete(
-            tavily_search_async(query, max_results)
-        )
+        # Handle async in existing event loop (FastAPI/uvicorn environment)
+        try:
+            # Try to get the current event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're in an async context already (like FastAPI)
+                # Use asyncio.create_task or run_coroutine_threadsafe
+                import concurrent.futures
+                import threading
+                
+                def run_in_new_loop():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        return new_loop.run_until_complete(
+                            tavily_search_async(query, max_results)
+                        )
+                    finally:
+                        new_loop.close()
+                
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(run_in_new_loop)
+                    results = future.result()
+            else:
+                # No running loop, we can use run_until_complete
+                results = loop.run_until_complete(
+                    tavily_search_async(query, max_results)
+                )
+        except RuntimeError:
+            # No event loop exists, create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            results = loop.run_until_complete(
+                tavily_search_async(query, max_results)
+            )
         
         # Deduplicate and format with score filtering
         formatted_results = deduplicate_and_format_sources(results, min_score=min_score)

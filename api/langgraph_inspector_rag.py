@@ -720,11 +720,9 @@ async def query_inspector_rag_streaming(question: str, thread_id: str = "default
         setup_time = time.time() - setup_start
         print(f"⏱️ Graph setup took: {setup_time:.2f}s")
         
-        # Initial state
+        # Initial state - don't include context/web_results keys until agents populate them
         initial_state = {
             "question": question,
-            "context": [],
-            "web_results": [],
             "response": "",
             "inspector_sources": [],
             "messages": [],
@@ -819,11 +817,9 @@ def query_inspector_rag(question: str, thread_id: str = "default") -> Dict[str, 
         "thread_id": thread_id
     }
     
-    # Initial state
+    # Initial state - don't include context/web_results keys until agents populate them
     initial_state = {
         "question": question,
-        "context": [],
-        "web_results": [],
         "response": "",
         "inspector_sources": [],
         "messages": [],

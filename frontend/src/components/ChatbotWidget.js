@@ -70,10 +70,11 @@ const SourcesDisplay = ({ sources }) => {
   
   // Group sources by type
   const sourcesByType = sources.reduce((acc, source) => {
-    const type = source.source?.includes('InterNACHI') ? 'InterNACHI Standards' :
-                  source.source?.includes('NCHILB') || source.source?.includes('NC Home Inspector Licensure Board') ? 'NC Licensure Board' :
-                  source.source?.includes('NC Building Codes') || source.source?.includes('Building Code') ? 'NC Building Codes' :
-                  source.type === 'web_resource' ? 'Web Resources' :
+    // Check type first, then fall back to name-based categorization for RAG sources
+    const type = source.type === 'web_resource' ? 'Web Resources' :
+                  source.type === 'regulatory' && source.source?.includes('InterNACHI') ? 'InterNACHI Standards' :
+                  source.type === 'regulatory' && (source.source?.includes('NCHILB') || source.source?.includes('NC Home Inspector Licensure Board')) ? 'NC Licensure Board' :
+                  source.type === 'regulatory' && (source.source?.includes('NC Building Codes') || source.source?.includes('Building Code')) ? 'NC Building Codes' :
                   source.type === 'regulatory' ? 'Regulatory Standards' :
                   'Other Sources';
     
@@ -408,6 +409,7 @@ const ChatbotWidget = () => {
                   } else if (data.status === 'sources') {
                     // Store sources for final display
                     responseSources = data.sources;
+                    console.log('📚 SOURCES RECEIVED:', data.sources);
                   } else if (data.status === 'complete') {
                     // Final completion - add timing and sources to accumulated response
                     const totalTime = data.total_time_seconds || ((Date.now() - requestStartTime) / 1000);

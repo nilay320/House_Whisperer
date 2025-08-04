@@ -542,14 +542,15 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
         {context_text}
 
         INSTRUCTIONS:
-        - Answer ONLY based on the provided context above
+        - Answer based on the provided context above
         - When REGULATORY SOURCES are present, prioritize them for requirements and standards
         - When WEB RESOURCES are present, use them for best practices, current information, and practical tips
         - Clearly distinguish between mandatory requirements (from regulations) and recommended practices (from web sources)
-        - If the context doesn't contain enough information to answer the question, say "I don't have enough information in the provided sources to answer this question"
-        - Do not use external knowledge beyond what's provided
-        - Include specific requirements, standards, and procedures from the sources
+        - If the sources provide relevant information, summarize what you found even if it doesn't completely answer the question
+        - If no relevant information is found, say "I couldn't find relevant information in the available sources"
+        - Include specific details, standards, and procedures from the sources
         - Cite which sources you're referencing, including URLs for web resources when relevant
+        - For recall information, list any specific recalls found with manufacturer and model details
         - Format professionally for working home inspectors
         - Keep response focused and relevant to the question"""
 

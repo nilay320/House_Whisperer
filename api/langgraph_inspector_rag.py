@@ -34,7 +34,7 @@ load_dotenv()
 COLLECTION_NAME = 'inspector-standards'
 EMBEDDING_MODEL = 'text-embedding-3-small'
 CHAT_MODEL = 'gpt-4o-mini'
-USE_REACT_AGENTS = False  # Set to True to use ReAct agents instead of direct calls
+USE_REACT_AGENTS = False  # Set to True to use ReAct agents (currently falls back to direct calls)
 
 # Strip whitespace from environment variables on module load
 for key in ['OPENAI_API_KEY', 'QDRANT_URL', 'QDRANT_API_KEY']:
@@ -389,7 +389,7 @@ def research_node(state: InspectorRAGState) -> InspectorRAGState:
         }
 
 def web_search_node(state: InspectorRAGState) -> InspectorRAGState:
-    """Web search agent node - searches for current information.
+    """Web search agent node - can use ReAct agent or direct calls.
     
     Following the Deep Research pattern for external information gathering.
     """
@@ -402,8 +402,19 @@ def web_search_node(state: InspectorRAGState) -> InspectorRAGState:
         # Ensure clients are initialized
         _initialize_clients()
         
-        # Direct web search using the tool
-        web_results = search_web_for_inspection_info.invoke({"query": state["question"]})
+        if USE_REACT_AGENTS:
+            # Use ReAct agent for true agentic reasoning
+            print("🤖 Using ReAct web search agent...")
+            agent = create_web_search_agent()
+            result = agent.invoke({"messages": [HumanMessage(content=state["question"])]})
+            
+            # Extract results from agent response
+            # For now, fall back to direct search
+            print("⚠️ ReAct agent response parsing not yet implemented, using direct search")
+            web_results = search_web_for_inspection_info.invoke({"query": state["question"]})
+        else:
+            # Direct web search - faster and more predictable
+            web_results = search_web_for_inspection_info.invoke({"query": state["question"]})
         
         # Convert to Documents for consistency
         web_docs = []

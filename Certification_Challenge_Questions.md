@@ -271,8 +271,7 @@ If time permits, we'll add basic usage logging to gather insights for future ite
 
 ## Task 8: Documentation
 
-**Loom video:** ✅ Completed
-
+**Loom video:** https://www.loom.com/share/be67715de9874e7aa418f83e3eee595b
 ---
 
 *This certification challenge demonstrates the development of an AI-powered assistant for home inspectors, showcasing advanced RAG techniques, comprehensive evaluation, and practical application in a regulated professional domain.* 

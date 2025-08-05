@@ -19,7 +19,7 @@ from langchain_core.tools import tool
 # LangGraph imports
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-# Removed: from langgraph.prebuilt import create_react_agent (not used)
+from langgraph.prebuilt import create_react_agent
 
 # Qdrant client
 from qdrant_client import QdrantClient
@@ -34,6 +34,7 @@ load_dotenv()
 COLLECTION_NAME = 'inspector-standards'
 EMBEDDING_MODEL = 'text-embedding-3-small'
 CHAT_MODEL = 'gpt-4o-mini'
+USE_REACT_AGENTS = False  # Set to True to use ReAct agents instead of direct calls
 
 # Strip whitespace from environment variables on module load
 for key in ['OPENAI_API_KEY', 'QDRANT_URL', 'QDRANT_API_KEY']:
@@ -177,10 +178,47 @@ def search_inspector_standards(query: str) -> List[Dict[str, Any]]:
         print(f"❌ Search error: {e}")
         return [{"error": f"Search failed: {str(e)}"}]
 
-# Removed get_building_codes_info - not used, search_inspector_standards handles all documents
+# Agent definitions - can be used for true agentic reasoning
+def create_research_agent():
+    """Create the research agent for inspector standards."""
+    system_prompt = """You are a research agent specializing in North Carolina home inspection standards and regulations.
 
-# Removed create_research_agent, create_synthesis_agent, create_web_search_agent - not used
-# The actual agent nodes (research_node, synthesis_node, web_search_node) directly call tools instead
+Your role:
+- Search through inspector standards, building codes, and regulations
+- Provide accurate, detailed information about inspection requirements
+- Focus on InterNACHI standards, NCHILB regulations, and NC building codes
+- Always cite your sources and provide specific details
+
+Use the available tools to search for relevant information. Be thorough and accurate."""
+
+    research_agent = create_react_agent(
+        llm, 
+        [search_inspector_standards],
+        state_modifier=system_prompt
+    )
+    
+    return research_agent
+
+def create_web_search_agent():
+    """Create the web search agent for current information and best practices."""
+    system_prompt = """You are a web research specialist for home inspection topics.
+    
+Your role:
+- Search the web for current information, best practices, and industry updates
+- Find manufacturer information, recalls, and technical specifications
+- Look for practical solutions from experienced inspectors
+- Prioritize trusted sources (InterNACHI, ASHI, CPSC, manufacturers)
+- Focus on North Carolina-specific information when relevant
+
+Use the available search tools to find relevant, current information that complements regulatory requirements."""
+
+    web_search_agent = create_react_agent(
+        llm,
+        [search_web_for_inspection_info],
+        state_modifier=system_prompt
+    )
+    
+    return web_search_agent
 
 # Supervisor agent following the notebook pattern
 def supervisor_node(state: InspectorRAGState) -> InspectorRAGState:
@@ -280,21 +318,34 @@ Choose from: research_agent, synthesis_agent, FINISH"""),
         }
 
 def research_node(state: InspectorRAGState) -> InspectorRAGState:
-    """Research agent node - optimized for speed."""
+    """Research agent node - can use ReAct agent or direct calls."""
     import time
     research_start = time.time()
     
     try:
-        print(f"🔍 Fast research starting for: {state['question']}")
+        print(f"🔍 Research starting for: {state['question']}")
         
         # Ensure clients are initialized
         _initialize_clients()
         
-        # Skip the slow react agent - call search directly
-        search_start = time.time()
-        search_results = search_inspector_standards.invoke({"query": state["question"]})
-        search_time = time.time() - search_start
-        print(f"🔍 Direct search completed in {search_time:.2f}s")
+        if USE_REACT_AGENTS:
+            # Use ReAct agent for true agentic reasoning
+            print("🤖 Using ReAct research agent...")
+            agent = create_research_agent()
+            result = agent.invoke({"messages": [HumanMessage(content=state["question"])]})
+            
+            # Extract search results from agent response
+            # This is more complex as we need to parse the agent's tool calls
+            search_results = []
+            # For now, fall back to direct search until we implement proper parsing
+            print("⚠️ ReAct agent response parsing not yet implemented, using direct search")
+            search_results = search_inspector_standards.invoke({"query": state["question"]})
+        else:
+            # Direct search - faster and more predictable
+            search_start = time.time()
+            search_results = search_inspector_standards.invoke({"query": state["question"]})
+            search_time = time.time() - search_start
+            print(f"🔍 Direct search completed in {search_time:.2f}s")
         
         # Convert search results to documents
         context_docs = []

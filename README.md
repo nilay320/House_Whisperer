@@ -1,206 +1,110 @@
-# Home Inspection AI Assistant
+# House Whisperer - AI Engineering Midterm Submission
 
-A comprehensive AI-powered platform for home inspectors and buyers, featuring both web and mobile applications.
+## NC Home Inspector AI Assistant
 
-## 🏗️ Project Structure
+A multi-agent RAG system that helps home buyers understand inspection reports by combining regulatory standards with real-time web information.
 
-```
-Home_inspector_assitant/
-├── api/                    # Backend API (Python/Flask)
-├── frontend/              # React Web Application
-│   ├── src/
-│   │   ├── components/    # Reusable UI components
-│   │   ├── screens/       # Page components
-│   │   └── services/      # API and Firebase services
-├── mobile-app/            # React Native Mobile Application
-│   ├── src/
-│   │   ├── components/    # Mobile UI components
-│   │   └── screens/       # Mobile screen components
-└── README.md
-```
+## 🎯 Problem Statement
 
-## 🚀 Features
+Home buyers receive 30+ page technical inspection reports filled with jargon they don't understand, leading to confusion and poor decision-making during the largest purchase of their lives.
 
-### Web Application (React)
-- **Authentication System**: Firebase-powered login/signup with Google integration
-- **Chatbot Widget**: AI-powered chat interface for buyers to ask questions about inspection reports
-- **PDF Upload**: Drag-and-drop functionality for inspection report uploads
-- **Responsive Design**: Modern, professional UI optimized for all devices
+## 💡 Solution
 
-### Mobile Application (React Native)
-- **Inspector Dashboard**: Overview of recent inspections with quick stats
-- **Voice Note Capture**: Record voice notes with play/pause functionality
-- **Photo Capture**: Take photos or upload from gallery with text notes
-- **AI Report Generation**: Collapsible sections for reviewing and editing AI-generated reports
-- **Searchable Report Viewer**: Keyword search with highlighted results and expandable context
+An AI-powered chatbot that provides plain-English explanations of inspection findings by searching both:
+- Pre-indexed NC inspection standards (InterNACHI, NCHILB, Building Codes)
+- Real-time web search for recalls, manufacturers, and current best practices
 
-## 🛠️ Technology Stack
+## 🏗️ Architecture
 
-### Frontend (Web)
-- **React 18** with React Router
-- **Tailwind CSS** for styling
-- **Framer Motion** for animations
-- **Firebase** for authentication
-- **React Hook Form** for form handling
-- **React Dropzone** for file uploads
+### Multi-Agent System (LangGraph)
+1. **Supervisor Agent** - Routes queries based on content analysis
+2. **Research Agent** - Searches vector database (Qdrant)
+3. **Web Search Agent** - Queries external sources (Tavily API)
+4. **Synthesis Agent** - Generates comprehensive responses (GPT-4o-mini)
 
-### Mobile App
-- **React Native** with Expo
-- **React Navigation** for routing
-- **Expo AV** for audio recording
-- **Expo Camera/Image Picker** for photo capture
-- **React Native Paper** for UI components
-- **Material Icons** for icons
+### Tech Stack
+- **Frontend**: React + Tailwind CSS (Vercel)
+- **Backend**: FastAPI + Python (Railway)
+- **Vector DB**: Qdrant Cloud
+- **LLM**: OpenAI GPT-4o-mini
+- **Embeddings**: text-embedding-3-small
+- **Web Search**: Tavily API
 
-### Backend
-- **Python/Flask** API
-- **Firebase** for authentication and storage
-- **Vector storage** for AI processing
-
-## 📱 Screens & Components
-
-### Web Application
-1. **Authentication Screen** (`frontend/src/screens/AuthScreen.js`)
-   - Email/password login and signup
-   - Google authentication
-   - Form validation and error handling
-
-2. **Chatbot Widget** (`frontend/src/components/ChatbotWidget.js`)
-   - Floating chat interface
-   - PDF upload functionality
-   - AI-powered responses
-   - Real-time messaging
-
-### Mobile Application
-1. **Inspector Dashboard** (`mobile-app/src/screens/InspectorDashboard.js`)
-   - Recent inspections list
-   - Quick statistics
-   - Start new inspection button
-   - Modern card-based UI
-
-2. **Voice Note Capture** (`mobile-app/src/screens/VoiceNoteCapture.js`)
-   - Voice recording with play/pause
-   - Photo capture and upload
-   - Text notes for images
-   - Clean mobile-friendly interface
-
-3. **AI Report Generation** (`mobile-app/src/screens/AIReportGeneration.js`)
-   - Collapsible accordion sections
-   - Editable text fields
-   - Approve/edit functionality
-   - Progress tracking
-
-4. **Searchable Report Viewer** (`mobile-app/src/components/SearchableReportViewer.js`)
-   - Keyword search functionality
-   - Highlighted search results
-   - Expandable context views
-   - Mobile-optimized interface
-
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js (v16 or higher)
-- npm or yarn
-- Expo CLI (for mobile development)
-- Firebase project setup
+- Node.js 18+
+- Python 3.9+
+- OpenAI API key
+- Qdrant Cloud account
+- Tavily API key
 
-### Web Application Setup
+### Backend Setup
+```bash
+cd api
+pip install -r requirements.txt
 
-1. **Install dependencies**:
-   ```bash
-   cd frontend
-   npm install
-   ```
+# Set environment variables
+export OPENAI_API_KEY="your-key"
+export QDRANT_URL="your-qdrant-url"
+export QDRANT_API_KEY="your-qdrant-key"
+export TAVILY_API_KEY="your-tavily-key"
 
-2. **Configure Firebase**:
-   Create a `.env` file in the `frontend` directory:
-   ```
-   REACT_APP_FIREBASE_API_KEY=your_api_key
-   REACT_APP_FIREBASE_AUTH_DOMAIN=your_auth_domain
-   REACT_APP_FIREBASE_PROJECT_ID=your_project_id
-   REACT_APP_FIREBASE_STORAGE_BUCKET=your_storage_bucket
-   REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-   REACT_APP_FIREBASE_APP_ID=your_app_id
-   ```
+# Run the API
+python app.py
+```
 
-3. **Start the development server**:
-   ```bash
-   npm start
-   ```
+### Frontend Setup
+```bash
+cd frontend
+npm install
 
-### Mobile Application Setup
+# Set API URL in .env.development
+echo "REACT_APP_API_URL=http://localhost:8000" > .env.development
 
-1. **Install dependencies**:
-   ```bash
-   cd mobile-app
-   npm install
-   ```
+# Start the app
+npm start
+```
 
-2. **Start the Expo development server**:
-   ```bash
-   npm start
-   ```
+## 📊 Key Features
 
-3. **Run on device/simulator**:
-   - Scan QR code with Expo Go app
-   - Press 'i' for iOS simulator
-   - Press 'a' for Android emulator
+- **Intelligent Query Routing**: Automatically determines if web search is needed
+- **Source Attribution**: Shows relevance scores and source types
+- **Real-time Streaming**: SSE for progress updates during search
+- **Fallback Strategies**: Web search when RAG returns no results
 
-## 🎨 Design System
+## 🔍 Example Queries
 
-### Color Palette
-- **Primary Blue**: #3B82F6
-- **Success Green**: #10B981
-- **Warning Orange**: #F59E0B
-- **Error Red**: #EF4444
-- **Gray Scale**: #111827, #374151, #6B7280, #9CA3AF, #E5E7EB
+- "What are the electrical inspection requirements in NC?"
+- "Are there any recalls on Rheem water heaters?"
+- "What's the latest on AFCI requirements?"
+- "How do I inspect HVAC systems?"
 
-### Typography
-- **Headers**: Bold, 18-24px
-- **Body Text**: Regular, 14-16px
-- **Captions**: Regular, 12-14px
+## 📁 Project Structure
 
-### Components
-- **Cards**: Rounded corners (12px), subtle shadows
-- **Buttons**: Primary actions (blue), secondary (gray), destructive (red)
-- **Inputs**: Clean borders, focus states with blue ring
-- **Icons**: Material Design icons throughout
+```
+House_Whisperer/
+├── api/
+│   ├── app.py                    # FastAPI server
+│   ├── langgraph_inspector_rag.py # Multi-agent workflow
+│   └── web_search_tools.py       # Tavily integration
+├── frontend/
+│   └── src/
+│       └── components/
+│           └── ChatbotWidget.js  # Chat interface
+└── docs/
+    └── data/                     # Indexed documents
+```
 
-## 🔧 Development
+## 🎓 Midterm Deliverables
 
-### Code Style
-- **React**: Functional components with hooks
-- **JavaScript**: ES6+ features, consistent naming
-- **CSS**: Tailwind utility classes, custom components when needed
-- **Mobile**: React Native best practices, platform-specific considerations
+This project satisfies all certification requirements:
+- ✅ Multi-agent architecture with LangGraph
+- ✅ External API integration (Tavily)
+- ✅ Agentic reasoning through intelligent routing
+- ✅ Production deployment (Vercel + Railway)
 
-### File Organization
-- **Components**: Reusable, single responsibility
-- **Screens**: Page-level components
-- **Services**: API calls, Firebase integration
-- **Utils**: Helper functions, constants
+## 🔗 Links
 
-## 📦 Deployment
-
-### Web Application
-- Build: `npm run build`
-- Deploy to Vercel, Netlify, or Firebase Hosting
-
-### Mobile Application
-- Build: `expo build:android` or `expo build:ios`
-- Submit to App Store/Google Play Store
-
-## 🤝 Contributing
-
-1. Create a feature branch
-2. Make your changes
-3. Test thoroughly
-4. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 🆘 Support
-
-For support, please open an issue in the repository or contact the development team. 
+- [Assignment Requirements](docs/midterm/requirements.txt)
+- [Project Plan](AI_ENGINEERING_PROJECT_PLAN.md)

@@ -1,53 +1,73 @@
-# Project Context: House Whisperer
+# PROJECT CONTEXT - House Whisperer Midterm Submission
 
-## Project Overview
-House Whisperer is an AI-powered home inspection assistant application that helps home inspectors capture, analyze, and generate comprehensive inspection reports.
+## Current Implementation Status (Midterm Branch)
 
-## Current Implementation State
-- **Frontend**: React-based web application with PWA capabilities
-- **Mobile App**: React Native application for field inspections
-- **Backend**: Python Flask API for PDF processing and AI analysis
-- **Database**: Firebase Firestore for data persistence
-- **Authentication**: Firebase Auth for user management
+### ✅ Completed Features
+1. **Multi-Agent RAG System with LangGraph**
+   - Supervisor agent for intelligent query routing
+   - Research agent for vector database search (Qdrant)
+   - Web search agent for real-time information (Tavily API)
+   - Synthesis agent for response generation (GPT-4o-mini)
 
-## Key Technologies
-- **Frontend**: React, Tailwind CSS, PWA
-- **Mobile**: React Native, Expo
-- **Backend**: Python, Flask, LangChain for AI/RAG
-- **Infrastructure**: Firebase, Vercel deployment
-- **AI**: PDF processing with RAG (Retrieval Augmented Generation)
+2. **External API Integration**
+   - Tavily web search for recalls, manufacturers, and current practices
+   - Trusted domain filtering for quality results
+   - Fallback strategies when RAG returns no results
 
-## Main Features
-1. Voice note capture during inspections
-2. Photo capture and annotation
-3. AI-powered report generation from inspection data
-4. PDF processing and analysis
-5. Searchable report viewer
-6. Inspector dashboard
+3. **Frontend Application**
+   - React-based chat interface deployed on Vercel
+   - Real-time SSE streaming for progress updates
+   - Source attribution with relevance scores
+   - Mobile-responsive design
 
-## Important Files
-- `/frontend/src/App.js`: Main web application entry point
-- `/mobile-app/src/screens/`: Mobile app screens (InspectorDashboard, VoiceNoteCapture, AIReportGeneration)
-- `/api/app.py`: Backend API server
-- `/frontend/src/components/InspectorCapture.js`: Web-based inspection capture component
-- `/frontend/src/services/firebase.js`: Firebase configuration
-- `CLAUDE.md`: Custom instructions for Claude assistant
+4. **Backend API**
+   - FastAPI backend deployed on Railway
+   - Server-Sent Events (SSE) for streaming responses
+   - CORS configuration for Vercel integration
+   - Health check and debugging endpoints
 
-## Recent Work
-- Fixed MediaRecorder constructor error in InspectorCapture component
-- Added PWA functionality for mobile voice/photo capture
-- Implemented role support for different user types
+### 🔧 Technology Stack
+- **LLM**: GPT-4o-mini
+- **Embeddings**: text-embedding-3-small
+- **Orchestration**: LangGraph
+- **Vector DB**: Qdrant Cloud
+- **Web Search**: Tavily API
+- **Frontend**: React + Tailwind CSS
+- **Backend**: FastAPI + Python
+- **Deployment**: Vercel (frontend) + Railway (backend)
 
-## Pending Tasks
-- Complete midterm submission requirements
-- Test AI report generation with sample PDFs
-- Verify Firebase security rules are properly configured
-- Ensure mobile app builds correctly
+### 📁 Key Files
+- `api/langgraph_inspector_rag.py` - Multi-agent workflow implementation
+- `api/web_search_tools.py` - Tavily web search integration
+- `api/app.py` - FastAPI server with SSE streaming
+- `frontend/src/components/ChatbotWidget.js` - Chat interface
+- `docs/midterm/requirements.txt` - Assignment requirements
 
-## Session Notes
-[Update this section at the end of each work session]
+### 🌐 Deployment URLs
+- Frontend: Deployed on Vercel
+- Backend API: Deployed on Railway with environment variables
 
-### Last Updated: [Date]
-- Work completed: [Summary]
-- Files modified: [List]
-- Next steps: [Tasks]
+### 📊 Data Sources
+- Pre-indexed NC inspection standards in Qdrant
+- InterNACHI Standards of Practice
+- NCHILB regulations
+- NC Building Codes (2024)
+- Real-time web search via Tavily
+
+### 🚀 Next Steps (Demo Day)
+1. Complete voice-to-report pipeline with Whisper API
+2. Optimize retrieval with MultiQuery
+3. Add basic usage monitoring
+
+### ⚠️ Important Notes
+- Firebase authentication removed for midterm (not required)
+- Mobile app components removed (focus on web RAG)
+- Using direct tool calls instead of ReAct agents for performance
+- All environment variables must be set in deployment platforms
+
+## Recent Changes (Midterm Submission)
+- Added Tavily web search integration for external API requirement
+- Implemented multi-agent routing with fallback strategies
+- Deployed to production (Vercel + Railway)
+- Removed Firebase dependencies
+- Optimized for performance with direct tool calls

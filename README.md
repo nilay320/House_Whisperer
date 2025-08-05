@@ -30,7 +30,11 @@ An AI-powered chatbot that provides plain-English explanations of inspection fin
 - **Embeddings**: text-embedding-3-small
 - **Web Search**: Tavily API
 
-## 🚀 Quick Start
+## 🌐 Live Demo
+
+The application is deployed and available at: **[YOUR-VERCEL-URL-HERE]**
+
+## 🚀 Running Locally
 
 ### Prerequisites
 - Node.js 18+
@@ -39,32 +43,49 @@ An AI-powered chatbot that provides plain-English explanations of inspection fin
 - Qdrant Cloud account
 - Tavily API key
 
-### Backend Setup
+### 1. Clone the Repository
+```bash
+git clone https://github.com/rchallapilla/House_Whisperer.git
+cd House_Whisperer
+```
+
+### 2. Backend Setup
 ```bash
 cd api
 pip install -r requirements.txt
 
-# Set environment variables
-export OPENAI_API_KEY="your-key"
-export QDRANT_URL="your-qdrant-url"
-export QDRANT_API_KEY="your-qdrant-key"
-export TAVILY_API_KEY="your-tavily-key"
+# Create .env file with your credentials
+cat > .env << EOF
+OPENAI_API_KEY=your-openai-key
+QDRANT_URL=your-qdrant-url
+QDRANT_API_KEY=your-qdrant-key
+TAVILY_API_KEY=your-tavily-key
+EOF
 
-# Run the API
+# Run the API server
 python app.py
+# API will be available at http://localhost:8000
 ```
 
-### Frontend Setup
+### 3. Frontend Setup (in new terminal)
 ```bash
 cd frontend
 npm install
 
-# Set API URL in .env.development
+# Set API URL to local backend
 echo "REACT_APP_API_URL=http://localhost:8000" > .env.development
 
-# Start the app
+# Start the React app
 npm start
+# App will open at http://localhost:3000
 ```
+
+### 4. Test the Application
+- Open http://localhost:3000 in your browser
+- Try asking questions like:
+  - "What are the electrical inspection requirements in NC?"
+  - "Are there any recalls on Rheem water heaters?"
+  - "How do I inspect HVAC systems?"
 
 ## 📊 Key Features
 

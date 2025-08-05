@@ -19,7 +19,7 @@ from langchain_core.tools import tool
 # LangGraph imports
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import create_react_agent
+# Removed: from langgraph.prebuilt import create_react_agent (not used)
 
 # Qdrant client
 from qdrant_client import QdrantClient
@@ -177,99 +177,10 @@ def search_inspector_standards(query: str) -> List[Dict[str, Any]]:
         print(f"❌ Search error: {e}")
         return [{"error": f"Search failed: {str(e)}"}]
 
-@tool
-def get_building_codes_info(query: str) -> List[Dict[str, Any]]:
-    """
-    Search specifically through NC Building Codes for construction and safety requirements.
-    Use this for questions about building codes, construction standards, or safety regulations.
-    """
-    try:
-        vector_store = get_vector_store()
-        
-        # Create a filter for building codes only
-        docs_with_scores = vector_store.similarity_search_with_score(
-            query, 
-            k=3,
-            filter={"category": "Building Codes"}
-        )
-        
-        results = []
-        for doc, score in docs_with_scores:
-            results.append({
-                "content": doc.page_content,
-                "source": doc.metadata.get("source", "Unknown"),
-                "score": float(score)
-            })
-        
-        return results
-    except Exception as e:
-        return [{"error": f"Building codes search failed: {str(e)}"}]
+# Removed get_building_codes_info - not used, search_inspector_standards handles all documents
 
-# Agent definitions following the notebook pattern
-def create_research_agent():
-    """Create the research agent for inspector standards."""
-    system_prompt = """You are a research agent specializing in North Carolina home inspection standards and regulations.
-
-Your role:
-- Search through inspector standards, building codes, and regulations
-- Provide accurate, detailed information about inspection requirements
-- Focus on InterNACHI standards, NCHILB regulations, and NC building codes
-- Always cite your sources and provide specific details
-
-Use the available tools to search for relevant information. Be thorough and accurate."""
-
-    research_agent = create_react_agent(
-        llm, 
-        [search_inspector_standards, get_building_codes_info],
-        state_modifier=system_prompt
-    )
-    
-    return research_agent
-
-def create_synthesis_agent():
-    """Create the synthesis agent to compile and format responses."""
-    system_prompt = """You are a synthesis agent that creates comprehensive, well-formatted responses about NC home inspection topics.
-
-Your role:
-- Take research findings and synthesize them into clear, actionable answers
-- Organize information logically (requirements, standards, procedures, etc.)
-- Ensure accuracy and completeness
-- Format responses professionally for home inspectors
-- Always include source attributions
-
-Create responses that are practical and useful for working home inspectors."""
-
-    synthesis_agent = create_react_agent(
-        llm,
-        [],  # No tools needed for synthesis
-        state_modifier=system_prompt
-    )
-    
-    return synthesis_agent
-
-def create_web_search_agent():
-    """Create the web search agent for current information and best practices.
-    
-    Following the Deep Research pattern for external information gathering.
-    """
-    system_prompt = """You are a web research specialist for home inspection topics.
-    
-Your role:
-- Search the web for current information, best practices, and industry updates
-- Find manufacturer information, recalls, and technical specifications
-- Look for practical solutions from experienced inspectors
-- Prioritize trusted sources (InterNACHI, ASHI, CPSC, manufacturers)
-- Focus on North Carolina-specific information when relevant
-
-Use the available search tools to find relevant, current information that complements regulatory requirements."""
-
-    web_search_agent = create_react_agent(
-        llm,
-        [search_web_for_inspection_info],
-        state_modifier=system_prompt
-    )
-    
-    return web_search_agent
+# Removed create_research_agent, create_synthesis_agent, create_web_search_agent - not used
+# The actual agent nodes (research_node, synthesis_node, web_search_node) directly call tools instead
 
 # Supervisor agent following the notebook pattern
 def supervisor_node(state: InspectorRAGState) -> InspectorRAGState:

@@ -32,9 +32,9 @@ An AI-powered chatbot that provides plain-English explanations of inspection fin
 
 ## 🌐 Live Demo
 
-The application is deployed and available at: **[YOUR-VERCEL-URL-HERE]**
+The application is deployed and available at: https://house-whisperer.vercel.app/
 
-## 🚀 Running Locally
+## 🚀 If you want to run locally instead, 
 
 ### Prerequisites
 - Node.js 18+
@@ -124,8 +124,3 @@ This project satisfies all certification requirements:
 - ✅ External API integration (Tavily)
 - ✅ Agentic reasoning through intelligent routing
 - ✅ Production deployment (Vercel + Railway)
-
-## 🔗 Links
-
-- [Assignment Requirements](docs/midterm/requirements.txt)
-- [Project Plan](AI_ENGINEERING_PROJECT_PLAN.md)

@@ -1,0 +1,17 @@
+[project]
+name = "pdf-footer-remover"
+version = "0.1.0"
+description = "Tool to remove footers from PDF documents"
+dependencies = [
+    "PyMuPDF>=1.23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyter",
+    "notebook",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

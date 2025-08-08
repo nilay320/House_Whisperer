@@ -26,7 +26,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'))
 
 # Configuration
-COLLECTION_NAME = 'inspector-standards'
+COLLECTION_NAME = 'inspector-standards-postmidterm'
 EMBEDDING_MODEL = 'text-embedding-3-small'
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200

@@ -1,0 +1,6 @@
+# Cursor Workflow Rule
+
+- Never commit or push changes until the user explicitly says "commit".
+- Always work on the current feature branch; never push to `main`.
+- Prefer incremental, minimal edits; avoid regenerating large files unnecessarily.
+- Follow the human policy in `CONTRIBUTING.md` for testing and approvals.

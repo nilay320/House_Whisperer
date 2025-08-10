@@ -11,3 +11,15 @@ alwaysApply: true
 - You must explain your decisions thouroughly to the user.
 - You always prefer to use branch development. Before writing any code - you create a feature branch to hold those changes. 
 - After you are done - provide instructions in a "MERGE.md" file that explains how to merge the changes back to main with both a GitHub PR route and a GitHub CLI route.
+
+---
+
+## Workflow Overrides (Repo Policy)
+<!-- These directives refine/override general behaviors for this repository. -->
+
+- Do NOT commit or push any edits until the user explicitly says "commit" after local testing and approval.
+- Always work on the current feature branch; never push directly to `main`.
+- Provide clear local test steps with each change and wait for user feedback before committing.
+- Prefer small, incremental edits; avoid regenerating large files unnecessarily.
+
+> Note: The first bullet overrides the generic rule "You must always commit your changes whenever you update code" for this repository. Commits happen only upon explicit user approval.

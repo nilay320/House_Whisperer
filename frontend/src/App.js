@@ -1,11 +1,72 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import ChatbotWidget from './components/ChatbotWidget';
+import AuthScreen from './screens/AuthScreen';
+import { onAuthStateChange, getUserRole, signOutUser } from './services/firebase';
 import { Home, MessageCircle, BookOpen } from 'lucide-react';
 
+const InspectorShell = () => (
+  <div className="min-h-screen bg-gray-50 p-6">
+    <div className="max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">Inspector Workspace</h2>
+        <Link to="/" className="text-blue-600 hover:underline">Home</Link>
+      </div>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg border p-4">
+          <h3 className="font-semibold mb-2">Standards Q&A</h3>
+          <p className="text-sm text-gray-600 mb-3">Ask about InterNACHI, NCHILB, and NC codes.</p>
+          {/* Floating widget is global; we embed guidance here for now */}
+          <p className="text-xs text-gray-500">Use the chat widget (bottom-right) to ask questions.</p>
+        </div>
+        <div className="bg-white rounded-lg border p-4">
+          <h3 className="font-semibold mb-2">Voice Notes (coming next)</h3>
+          <p className="text-sm text-gray-600">Record notes and generate a draft report. This panel will host capture and transcript.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 function App() {
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onAuthStateChange(async (u) => {
+      setUser(u);
+      if (u) {
+        const { role } = await getUserRole(u.uid);
+        setRole(role);
+      } else {
+        setRole(null);
+      }
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50"><p>Loading…</p></div>
+    );
+  }
+
+  // If not signed in, show auth screen (no public landing for now)
+  if (!user) {
+    return (
+      <div className="App">
+        <Toaster position="top-right" />
+        <AuthScreen />
+      </div>
+    );
+  }
+
   return (
-    <div className="App">
+    <Router>
+      <div className="App">
       <Toaster
         position="top-right"
         toastOptions={{
@@ -16,7 +77,7 @@ function App() {
           },
         }}
       />
-      
+
       {/* Main Landing Page */}
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
@@ -111,9 +172,15 @@ function App() {
         </div>
       </div>
 
-      {/* Chatbot Widget - Always visible */}
+      {/* Chatbot Widget - visible to all for now */}
       <ChatbotWidget />
+      <Routes>
+        <Route path="/" element={<Navigate to="/inspector" />} />
+        <Route path="/inspector" element={user && role === 'inspector' ? <InspectorShell /> : <Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
     </div>
+    </Router>
   );
 }
 

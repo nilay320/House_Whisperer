@@ -1,2 +1,43 @@
 .vercel
 docs/data/*/*.pdf
+
+# Secrets
+.env
+.env.*
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Node / React
+node_modules/
+frontend/node_modules/
+frontend/build/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Expo / React Native
+mobile-app/node_modules/
+mobile-app/.expo/
+mobile-app/.expo-shared/
+mobile-app/dist/
+mobile-app/build/
+
+# Notebooks / Coverage
+.ipynb_checkpoints/
+coverage/
+.coverage
+htmlcov/
+
+# Large binaries at repo root
+/*.pdf
+*.zip

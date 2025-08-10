@@ -2,3 +2,6 @@ docs/
 mobile-app/
 *.md
 .DS_Store
+**/*.pdf
+**/*.mp4
+**/*.zip

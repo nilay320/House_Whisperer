@@ -31,7 +31,7 @@ from web_search_tools import search_web_for_inspection_info
 load_dotenv()
 
 # Configuration
-COLLECTION_NAME = 'inspector-standards'
+COLLECTION_NAME = 'inspector-standards-postmidterm'
 EMBEDDING_MODEL = 'text-embedding-3-small'
 CHAT_MODEL = 'gpt-4o-mini'
 USE_REACT_AGENTS = False  # Set to True to use ReAct agents (currently falls back to direct calls)

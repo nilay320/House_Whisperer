@@ -414,6 +414,11 @@ const ChatbotWidget = () => {
                     // Final completion - add timing and sources to accumulated response
                     const totalTime = data.total_time_seconds || ((Date.now() - requestStartTime) / 1000);
                     let finalResponse = accumulatedResponse;
+                    // Normalize common markdown issues before rendering
+                    // 1) Fix links with a space between "] (" → "]("
+                    finalResponse = finalResponse.replace(/\]\s+\(/g, '](');
+                    // 2) Collapse accidental double spaces before punctuation/newlines
+                    finalResponse = finalResponse.replace(/\s+\n/g, '\n');
                     
                     // Add timing info
                     finalResponse += `\n\n⏱️ **Response Time: ${totalTime.toFixed(1)} seconds**`;
@@ -485,7 +490,7 @@ const ChatbotWidget = () => {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 transition-colors"
+        className="fixed right-4 bottom-4 md:right-6 md:bottom-6 z-50 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 transition-colors"
       >
         <AnimatePresence mode="wait">
           {isOpen ? (
@@ -518,7 +523,7 @@ const ChatbotWidget = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-24 right-6 z-40 w-[600px] h-[650px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"
+            className="fixed right-4 bottom-20 md:right-6 md:bottom-24 z-40 w-[92vw] max-w-[600px] h-[70vh] md:w-[600px] md:h-[650px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl">
@@ -609,7 +614,7 @@ const ChatbotWidget = () => {
             </div>
 
             {/* Input Area */}
-            <div className="p-4 border-t border-gray-200">
+            <div className="p-3 md:p-4 border-t border-gray-200 pb-[max(env(safe-area-inset-bottom),0px)]">
               <div className="flex items-end space-x-2">
                 <div className="flex-1">
                   <textarea
@@ -618,7 +623,7 @@ const ChatbotWidget = () => {
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Ask about inspection standards, codes, or regulations..."
-                    className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm md:text-base"
                     rows={1}
                     style={{ minHeight: '40px', maxHeight: '120px' }}
                   />

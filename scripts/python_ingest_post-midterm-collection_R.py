@@ -163,8 +163,9 @@ def make_point_id(doc_source: str,
     content_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
     loc = f"{page_start}-{page_end}-{local_idx}"
     raw = f"{doc_source}|{experiment_label}|{loc}|{content_sha}"
-    primary_id = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-    return primary_id, content_sha
+    # Qdrant accepts only integer or UUID IDs; use deterministic UUIDv5
+    primary_uuid = uuid.uuid5(uuid.NAMESPACE_URL, raw)
+    return str(primary_uuid), content_sha
 
 def get_token_encoder():
     if tiktoken is None:
@@ -505,7 +506,7 @@ class ChunkingPipeline:
                     "experiment_label": experiment_label,
                     "chunking_strategy": strategy.value,
                     "chunking_params": { "chunk_size": cfg["chunk_size"], "chunk_overlap": cfg["chunk_overlap"] },
-                    "ingestion_timestamp": datetime.utcnow().isoformat(),
+                    "ingestion_timestamp": datetime.now(datetime.UTC).isoformat(),
                     "token_count": tok_count,
                     # page + section metadata
                     "page_start": m.get("page_start"),

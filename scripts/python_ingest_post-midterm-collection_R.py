@@ -102,22 +102,22 @@ def build_text_splitter(
         separators=chosen_separators,
     )
 
-def ensure_collection_exists():
+def ensure_collection_exists(collection_name: str):
     """Ensure the collection exists."""
     try:
-        collection = qdrant_client.get_collection(COLLECTION_NAME)
-        print(f"✅ Collection exists: {COLLECTION_NAME} ({collection.points_count} points)")
+        collection = qdrant_client.get_collection(collection_name)
+        print(f"✅ Collection exists: {collection_name} ({collection.points_count} points)")
         return True
     except Exception:
-        print(f"📋 Creating collection: {COLLECTION_NAME}")
+        print(f"📋 Creating collection: {collection_name}")
         qdrant_client.create_collection(
-            collection_name=COLLECTION_NAME,
+            collection_name=collection_name,
             vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
         )
-        print(f"✅ Created collection: {COLLECTION_NAME}")
+        print(f"✅ Created collection: {collection_name}")
         return True
 
-def cleanup_document_chunks(source_name: str, experiment_label: Optional[str] = None) -> int:
+def cleanup_document_chunks(source_name: str, experiment_label: Optional[str] = None, collection_name: str = COLLECTION_NAME) -> int:
     """
     Delete all chunks for a specific document source.
     Returns number of chunks deleted.
@@ -132,7 +132,7 @@ def cleanup_document_chunks(source_name: str, experiment_label: Optional[str] = 
         
         while True:
             result = qdrant_client.scroll(
-                collection_name=COLLECTION_NAME,
+                collection_name=collection_name,
                 limit=1000,
                 offset=offset,
                 with_payload=True
@@ -164,7 +164,7 @@ def cleanup_document_chunks(source_name: str, experiment_label: Optional[str] = 
             for i in range(0, len(all_points), batch_size):
                 batch = all_points[i:i + batch_size]
                 qdrant_client.delete(
-                    collection_name=COLLECTION_NAME,
+                    collection_name=collection_name,
                     points_selector=batch
                 )
                 deleted_count += len(batch)
@@ -201,7 +201,7 @@ def extract_text_from_pdf(file_path: str) -> str:
         print(f"❌ PDF extraction failed: {e}")
         raise
 
-def ingest_document(doc_key: str, text_splitter, experiment_label: Optional[str] = None) -> int:
+def ingest_document(doc_key: str, text_splitter, experiment_label: Optional[str] = None, collection_name: str = COLLECTION_NAME) -> int:
     """
     Ingest a single document with cleanup.
     Returns number of chunks ingested.
@@ -225,7 +225,7 @@ def ingest_document(doc_key: str, text_splitter, experiment_label: Optional[str]
     print(f"   File: {file_path} ({file_size:.1f}MB)")
     
     # STEP 1: CLEANUP - Delete existing chunks for this experiment label only
-    cleanup_document_chunks(doc_info['source'], experiment_label=experiment_label)
+    cleanup_document_chunks(doc_info['source'], experiment_label=experiment_label, collection_name=collection_name)
     
     # STEP 2: EXTRACT TEXT
     print(f"📝 Extracting text from PDF...")
@@ -288,7 +288,7 @@ def ingest_document(doc_key: str, text_splitter, experiment_label: Optional[str]
         # Upload batch with error handling
         try:
             qdrant_client.upsert(
-                collection_name=COLLECTION_NAME,
+                collection_name=collection_name,
                 points=points,
                 wait=True  # Wait for operation to complete
             )
@@ -343,6 +343,8 @@ def main():
         default=None,
         help="Custom separators as comma-separated list or JSON list (e.g., [\\n\\n, \\n, . , ' ']) — only used for recursive/character",
     )
+    parser.add_argument("--collection-name", type=str, default=COLLECTION_NAME, help="Override target collection name")
+    parser.add_argument("--per-experiment-collection", action="store_true", help="If set, use a separate collection per experiment label (appends label to collection name)")
 
     args = parser.parse_args()
 
@@ -360,14 +362,26 @@ def main():
             separators=custom_separators,
         )
 
+        # Determine effective collection name
+        effective_collection_name = args.collection_name
+        if args.per_experiment_collection and args.experiment_label:
+            effective_collection_name = f"{args.collection_name}__{args.experiment_label}"
+
+        print(f"📚 Collection: {effective_collection_name}")
+
         # Ensure collection exists
-        ensure_collection_exists()
+        ensure_collection_exists(effective_collection_name)
 
         # Ingest document
-        chunks_count = ingest_document(args.document_key, splitter, experiment_label=args.experiment_label)
+        chunks_count = ingest_document(
+            args.document_key,
+            splitter,
+            experiment_label=args.experiment_label,
+            collection_name=effective_collection_name,
+        )
 
         # Final status
-        collection_info = qdrant_client.get_collection(COLLECTION_NAME)
+        collection_info = qdrant_client.get_collection(effective_collection_name)
         print(f"\n✅ SUCCESS!")
         print(f"📊 Total collection size: {collection_info.points_count} points")
         print(f"📈 This session added: {chunks_count} chunks")

@@ -9,11 +9,16 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
+import argparse
 
 # LangChain imports
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import (
+    RecursiveCharacterTextSplitter,
+    CharacterTextSplitter,
+    TokenTextSplitter,
+)
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from langchain_community.document_loaders import PyMuPDFLoader
@@ -58,14 +63,44 @@ qdrant_client = QdrantClient(
     api_key=os.environ.get("QDRANT_API_KEY"),
 )
 
-# Text splitter - consistent with backend
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=CHUNK_SIZE,
-    chunk_overlap=CHUNK_OVERLAP,
-    length_function=len,
-    is_separator_regex=False,
-    separators=["\n\n", "\n", ". ", ".", " ", ""]
-)
+def build_text_splitter(
+    strategy: str,
+    chunk_size: int,
+    chunk_overlap: int,
+    separators: Optional[List[str]] = None,
+):
+    """Create a text splitter by strategy.
+
+    Supported strategies:
+      - recursive: hierarchical character splitter (default)
+      - character: simple character splitter using provided separators
+      - token: token-based splitter (uses tiktoken-compatible tokenizer)
+    """
+    normalized_strategy = (strategy or "").strip().lower() or "recursive"
+    chosen_separators = separators if separators is not None else ["\n\n", "\n", ". ", ".", " ", ""]
+
+    if normalized_strategy == "character":
+        return CharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            length_function=len,
+            is_separator_regex=False,
+            separators=chosen_separators,
+        )
+    if normalized_strategy == "token":
+        # TokenTextSplitter ignores custom separators; splits on token count
+        return TokenTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+    # Default: recursive
+    return RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        length_function=len,
+        is_separator_regex=False,
+        separators=chosen_separators,
+    )
 
 def ensure_collection_exists():
     """Ensure the collection exists."""
@@ -161,7 +196,7 @@ def extract_text_from_pdf(file_path: str) -> str:
         print(f"❌ PDF extraction failed: {e}")
         raise
 
-def ingest_document(doc_key: str) -> int:
+def ingest_document(doc_key: str, text_splitter) -> int:
     """
     Ingest a single document with cleanup.
     Returns number of chunks ingested.
@@ -193,7 +228,7 @@ def ingest_document(doc_key: str) -> int:
     print(f"   Extracted: {len(text)} characters")
     
     # STEP 3: CHUNK TEXT
-    print(f"✂️  Chunking text (size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})...")
+    print(f"✂️  Chunking text (size={text_splitter._chunk_size if hasattr(text_splitter, '_chunk_size') else CHUNK_SIZE}, overlap={text_splitter._chunk_overlap if hasattr(text_splitter, '_chunk_overlap') else CHUNK_OVERLAP})...")
     chunks = text_splitter.split_text(text)
     print(f"   Created: {len(chunks)} chunks")
     
@@ -234,7 +269,12 @@ def ingest_document(doc_key: str) -> int:
                     "chunk_index": i + j,
                     "total_chunks": len(chunks),
                     "file_name": os.path.basename(file_path),
-                    "extraction_method": "RecursiveCharacterTextSplitter"
+                    # Metadata to capture chunking strategy used for experiment tracking
+                    "chunking_strategy": type(text_splitter).__name__,
+                    "chunk_size": getattr(text_splitter, "_chunk_size", CHUNK_SIZE),
+                    "chunk_overlap": getattr(text_splitter, "_chunk_overlap", CHUNK_OVERLAP),
+                    "separators": getattr(text_splitter, "separators", None),
+                    "extraction_method": "PyMuPDFLoader",
                 }
             )
             points.append(point)
@@ -266,31 +306,65 @@ def ingest_document(doc_key: str) -> int:
     print(f"🎉 Completed {doc_key}: {total_uploaded} chunks ingested")
     return total_uploaded
 
+def _parse_separators_arg(raw: Optional[str]) -> Optional[List[str]]:
+    if not raw:
+        return None
+    text = raw.strip()
+    # Accept JSON-like list or comma-separated values
+    if text.startswith("[") and text.endswith("]"):
+        # Remove brackets and split on commas, keep escape sequences
+        inner = text[1:-1]
+        items = [s.strip().strip('"\'') for s in inner.split(",")]
+        return [
+            i.encode("utf-8").decode("unicode_escape") for i in items if i != ""
+        ]
+    # Comma-separated
+    parts = [p.strip() for p in text.split(",")]
+    return [p.encode("utf-8").decode("unicode_escape") for p in parts if p != ""]
+
+
 def main():
     """Main function."""
-    if len(sys.argv) < 2:
-        print("Usage: python python_ingest.py <document_key>")
-        print(f"Available documents: {', '.join(DOCUMENTS.keys())}")
-        sys.exit(1)
-    
-    doc_key = sys.argv[1]
-    
+    parser = argparse.ArgumentParser(description="Ingest a document into Qdrant with configurable chunking.")
+    parser.add_argument("document_key", choices=list(DOCUMENTS.keys()), help="Which document to ingest")
+    parser.add_argument("--strategy", choices=["recursive", "character", "token"], default="recursive", help="Text splitting strategy")
+    parser.add_argument("--chunk-size", type=int, default=CHUNK_SIZE, help="Chunk size for splitting")
+    parser.add_argument("--chunk-overlap", type=int, default=CHUNK_OVERLAP, help="Overlap between chunks")
+    parser.add_argument(
+        "--separators",
+        type=str,
+        default=None,
+        help="Custom separators as comma-separated list or JSON list (e.g., [\\n\\n, \\n, . , ' ']) — only used for recursive/character",
+    )
+
+    args = parser.parse_args()
+
     try:
         print("🚀 Python Document Ingestion with Cleanup")
-        print(f"🎯 Target: {doc_key}")
-        
+        print(f"🎯 Target: {args.document_key}")
+        print(f"🧪 Strategy: {args.strategy} | size={args.chunk_size}, overlap={args.chunk_overlap}")
+
+        # Build splitter
+        custom_separators = _parse_separators_arg(args.separators)
+        splitter = build_text_splitter(
+            strategy=args.strategy,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            separators=custom_separators,
+        )
+
         # Ensure collection exists
         ensure_collection_exists()
-        
+
         # Ingest document
-        chunks_count = ingest_document(doc_key)
-        
+        chunks_count = ingest_document(args.document_key, splitter)
+
         # Final status
         collection_info = qdrant_client.get_collection(COLLECTION_NAME)
         print(f"\n✅ SUCCESS!")
         print(f"📊 Total collection size: {collection_info.points_count} points")
         print(f"📈 This session added: {chunks_count} chunks")
-        
+
     except Exception as e:
         print(f"❌ FAILED: {e}")
         import traceback

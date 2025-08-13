@@ -39,17 +39,17 @@ CHUNK_OVERLAP = 200
 # Document mapping
 DOCUMENTS = {
     "InterNACHI": {
-        "path": "../docs/data/SOP/InterNACHI SOP.pdf",
+        "path": "../docs/data/InterNACHI.pdf",
         "source": "InterNACHI Standards of Practice",
         "category": "Standards"
     },
-    "NCHILB": {
-        "path": "../docs/data/SOP/NCHILB NORTH CAROLINA HOME INSPECTOR LICENSURE BOARD.pdf",
-        "source": "NC Home Inspector Licensure Board", 
-        "category": "Regulations"
+    "ASHI": {
+        "path": "../docs/data/ASHI standards_updated3-4-2015.pdf",
+        "source": "ASHI Standards of Practice",
+        "category": "Standards"
     },
     "NC_Codes": {
-        "path": "../docs/data/NC_Building_Inspection_Codes/2024_nc_collection_no_footer.pdf",
+        "path": "../docs/data/2024_nc_collection_no_footer (1).pdf",
         "source": "NC Building Codes 2024",
         "category": "Building Codes"
     }

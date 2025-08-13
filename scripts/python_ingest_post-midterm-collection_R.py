@@ -148,10 +148,23 @@ STRATEGY_CONFIGS: Dict[ChunkingStrategy, Dict[str, Any]] = {
 # -------------------------
 # Utilities
 # -------------------------
-def stable_id(doc_name: str, experiment_label: str, chunk_idx: int, content: str) -> str:
-    """Deterministic ID so re-ingests don't duplicate identical chunks."""
-    prefix = f"{doc_name}|{experiment_label}|{chunk_idx}|"
-    return hashlib.sha1((prefix + content[:96]).encode("utf-8")).hexdigest()
+def make_point_id(doc_source: str,
+                  experiment_label: str,
+                  page_start: int,
+                  page_end: int,
+                  local_idx: int,
+                  content: str) -> Tuple[str, str]:
+    """Create a stable point ID using position + full-content hash.
+
+    Returns (primary_id, dedup_hash).
+    - primary_id ensures identical text at different positions does not collide
+    - dedup_hash allows optional dedup analytics across runs
+    """
+    content_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    loc = f"{page_start}-{page_end}-{local_idx}"
+    raw = f"{doc_source}|{experiment_label}|{loc}|{content_sha}"
+    primary_id = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return primary_id, content_sha
 
 def get_token_encoder():
     if tiktoken is None:
@@ -500,7 +513,17 @@ class ChunkingPipeline:
                     "section_heading": m.get("section_heading"),
                 }
 
-                pid = stable_id(doc_info["source"], experiment_label, idx, content)
+                pstart = m.get("page_start", -1)
+                pend = m.get("page_end", -1)
+                pid, dedup_hash = make_point_id(
+                    doc_info["source"],
+                    experiment_label,
+                    pstart,
+                    pend,
+                    idx,
+                    content,
+                )
+                payload["dedup_hash"] = dedup_hash
                 points.append(PointStruct(id=pid, vector=vec, payload=payload))
 
             self.qdrant.upsert(collection_name=self.collection_name, points=points, wait=True)

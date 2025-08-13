@@ -1,2 +1,9 @@
 .vercel
-docs/data/*/*.pdf
+docs/data/**/*.pdf
+
+# Python virtualenv
+.venv/
+
+# Secrets
+.env
+.env.local

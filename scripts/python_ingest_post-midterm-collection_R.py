@@ -117,12 +117,13 @@ def ensure_collection_exists():
         print(f"✅ Created collection: {COLLECTION_NAME}")
         return True
 
-def cleanup_document_chunks(source_name: str) -> int:
+def cleanup_document_chunks(source_name: str, experiment_label: Optional[str] = None) -> int:
     """
     Delete all chunks for a specific document source.
     Returns number of chunks deleted.
     """
-    print(f"🧹 Cleaning up existing chunks for: '{source_name}'")
+    label_msg = f", label='{experiment_label}'" if experiment_label else ""
+    print(f"🧹 Cleaning up existing chunks for: '{source_name}'{label_msg}")
     
     try:
         # Get all points first (without filter since filter API is broken)
@@ -141,10 +142,14 @@ def cleanup_document_chunks(source_name: str) -> int:
                 break
                 
             # Filter points by source in Python (since Qdrant filter is broken)
-            matching_points = [
-                point.id for point in result[0] 
-                if point.payload.get("source") == source_name
-            ]
+            matching_points = []
+            for point in result[0]:
+                payload = point.payload or {}
+                if payload.get("source") != source_name:
+                    continue
+                if experiment_label is not None and payload.get("experiment_label") != experiment_label:
+                    continue
+                matching_points.append(point.id)
             all_points.extend(matching_points)
             
             offset = result[1]  # next_page_offset
@@ -196,7 +201,7 @@ def extract_text_from_pdf(file_path: str) -> str:
         print(f"❌ PDF extraction failed: {e}")
         raise
 
-def ingest_document(doc_key: str, text_splitter) -> int:
+def ingest_document(doc_key: str, text_splitter, experiment_label: Optional[str] = None) -> int:
     """
     Ingest a single document with cleanup.
     Returns number of chunks ingested.
@@ -219,8 +224,8 @@ def ingest_document(doc_key: str, text_splitter) -> int:
     file_size = os.path.getsize(file_path) / (1024 * 1024)
     print(f"   File: {file_path} ({file_size:.1f}MB)")
     
-    # STEP 1: CLEANUP - Delete existing chunks
-    cleanup_document_chunks(doc_info['source'])
+    # STEP 1: CLEANUP - Delete existing chunks for this experiment label only
+    cleanup_document_chunks(doc_info['source'], experiment_label=experiment_label)
     
     # STEP 2: EXTRACT TEXT
     print(f"📝 Extracting text from PDF...")
@@ -274,6 +279,7 @@ def ingest_document(doc_key: str, text_splitter) -> int:
                     "chunk_size": getattr(text_splitter, "_chunk_size", CHUNK_SIZE),
                     "chunk_overlap": getattr(text_splitter, "_chunk_overlap", CHUNK_OVERLAP),
                     "separators": getattr(text_splitter, "separators", None),
+                    "experiment_label": experiment_label,
                     "extraction_method": "PyMuPDFLoader",
                 }
             )
@@ -330,6 +336,7 @@ def main():
     parser.add_argument("--strategy", choices=["recursive", "character", "token"], default="recursive", help="Text splitting strategy")
     parser.add_argument("--chunk-size", type=int, default=CHUNK_SIZE, help="Chunk size for splitting")
     parser.add_argument("--chunk-overlap", type=int, default=CHUNK_OVERLAP, help="Overlap between chunks")
+    parser.add_argument("--experiment-label", type=str, default=None, help="Experiment label to tag points and scope cleanup (enables A/B tests in one collection)")
     parser.add_argument(
         "--separators",
         type=str,
@@ -357,7 +364,7 @@ def main():
         ensure_collection_exists()
 
         # Ingest document
-        chunks_count = ingest_document(args.document_key, splitter)
+        chunks_count = ingest_document(args.document_key, splitter, experiment_label=args.experiment_label)
 
         # Final status
         collection_info = qdrant_client.get_collection(COLLECTION_NAME)

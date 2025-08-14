@@ -25,7 +25,7 @@ import hashlib
 import random
 import argparse
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Tuple
 
 # Determinism helpers (for consistent evals)
@@ -506,7 +506,7 @@ class ChunkingPipeline:
                     "experiment_label": experiment_label,
                     "chunking_strategy": strategy.value,
                     "chunking_params": { "chunk_size": cfg["chunk_size"], "chunk_overlap": cfg["chunk_overlap"] },
-                    "ingestion_timestamp": datetime.now(datetime.UTC).isoformat(),
+                    "ingestion_timestamp": datetime.now(timezone.utc).isoformat(),
                     "token_count": tok_count,
                     # page + section metadata
                     "page_start": m.get("page_start"),

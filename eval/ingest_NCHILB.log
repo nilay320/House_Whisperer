@@ -1,0 +1,29 @@
+
+📄 Processing: NCHILB
+   Strategy: token - Token-based splitting
+   Experiment: token_512_64_tok_384_64
+   Source: NC Home Inspector Licensure Board
+   File: /home/chrag/projects/code/House_Whisperer/docs/data/NCHILB NORTH CAROLINA HOME INSPECTOR LICENSURE BOARD (1).pdf (0.6 MB)
+✅ Collection exists: post_midterm_R (31975 points)
+🧹 Cleanup: source='NC Home Inspector Licensure Board', experiment='token_512_64_tok_384_64'
+✅ Cleanup via filter complete
+📝 Extracting pages with cleanup...
+   Pages: 39
+✂️  Building chunks...
+   Created: 87 chunks | avg=1927 chars, min=226, max=4698
+🔄 Creating embeddings and uploading...
+   📦 Uploaded 25/87
+   📦 Uploaded 50/87
+   📦 Uploaded 75/87
+   📦 Uploaded 87/87
+🎉 Completed: 87 chunks ingested (collection now has 32062 points)
+
+✅ SUCCESS
+   strategy: token
+   experiment_label: token_512_64_tok_384_64
+   chunks_created: 87
+   chunks_uploaded: 87
+   avg_chunk_size_chars: 1927.0114942528735
+   min_chunk_size_chars: 226
+   max_chunk_size_chars: 4698
+   total_collection_points: 32062

@@ -31,10 +31,6 @@ from web_search_tools import search_web_for_inspection_info
 COLLECTION_NAME = 'inspector-standards-postmidterm'
 EMBEDDING_MODEL = 'text-embedding-3-small'
 CHAT_MODEL = 'gpt-4o-mini'
-# Optional lightweight policy loop (Option A) - retained for fallback but superseded by policy node
-USE_POLICY_LOOP = os.getenv("USE_POLICY_LOOP", "0") == "1"
-# Step cap for policy loop (also used by policy node below)
-MAX_POLICY_STEPS = int(os.getenv("POLICY_STEP_CAP", "3"))
 
 # Web augmentation configuration (opt-in). If enabled, we do one web search pass
 # even when RAG has hits, but only for keyword-triggered queries.

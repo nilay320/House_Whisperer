@@ -69,8 +69,7 @@ def get_effective_backend_config() -> dict:
         # Non-secrets
         "QDRANT_URL": os.getenv("QDRANT_URL", ""),
         "ALLOWED_ORIGINS": ALLOWED_ORIGINS,
-        "USE_POLICY_LOOP": os.getenv("USE_POLICY_LOOP", "0"),
-        "POLICY_STEP_CAP": int(os.getenv("POLICY_STEP_CAP", "3") or 3),
+        # Policy loop removed from active code; flags omitted
         "USE_WEB_AUGMENT": os.getenv("USE_WEB_AUGMENT", "0"),
         "WEB_AUGMENT_KEYWORDS": csv_list("WEB_AUGMENT_KEYWORDS"),
         "WEB_TOOL_FETCH_LIMIT": int(os.getenv("WEB_TOOL_FETCH_LIMIT", "8") or 8),

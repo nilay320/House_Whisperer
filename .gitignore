@@ -41,3 +41,5 @@ htmlcov/
 # Large binaries at repo root
 /*.pdf
 *.zip
+__pycache__/
+*.py[cod]

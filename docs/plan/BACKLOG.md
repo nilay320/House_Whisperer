@@ -38,3 +38,5 @@ Use this as the single prioritized backlog. When promoting an item, create an is
 
 ---
 Last updated: keep items small, with acceptance criteria. Link issues next to each item when created.
+
+Note: Legacy policy-loop has been removed from Inspector RAG. Any future ReAct/supervisor experiments will be added here as separate items.

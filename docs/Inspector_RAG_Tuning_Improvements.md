@@ -1,6 +1,6 @@
 # Inspector RAG: Tuning Ideas and Next Steps
 
-This note collects safe, incremental improvements we can apply to the Inspector Standards RAG and policy loop. Use as a living checklist; we can prioritize per Demo Day needs.
+This note collects safe, incremental improvements we can apply to the Inspector Standards RAG (single-pass flow). Use as a living checklist; we can prioritize per Demo Day needs.
 
 ## Retrieval parameters (Qdrant)
 - **Score threshold**
@@ -29,8 +29,8 @@ This note collects safe, incremental improvements we can apply to the Inspector 
   - `content`: concise, section-aware chunk
 - Re-ingest InterNACHI SOP if missing; verify Qdrant collection contains roof-related SOP chunks.
 
-## Policy loop behavior (graph)
-- Current (simplified): policy → RAG once; if empty → Web once → Synthesis
+## Flow behavior (graph)
+- Current: policy → RAG once; if empty → Web once → Synthesis
 - Guardrails:
   - Always synthesize after first successful RAG or Web step
   - Do not bounce back to RAG once Web is tried (v1)

@@ -62,6 +62,11 @@ vercel
 # Add env vars when prompted or in Vercel dashboard
 ```
 
+## 6. SPA + PWA notes (Vercel)
+- SPA routing: we use `frontend/vercel.json` with a catch‑all rewrite to `/index.html`. In the project settings, set Root Directory to `frontend`.
+- API base URL: use HTTPS for deployed backends (e.g., `REACT_APP_API_URL=https://<railway-app>.up.railway.app`).
+- Service Worker: for testing new deploys, do a hard reload and, if needed, unregister the SW (DevTools → Application → Service Workers → Unregister) and clear site data (Application → Clear storage).
+
 ## Troubleshooting
 
 - **"Cannot find module" errors**: Make sure you're in the `frontend` directory

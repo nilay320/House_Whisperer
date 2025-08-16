@@ -94,6 +94,9 @@ npm start
 - **Real-time Streaming**: SSE for progress updates during search
 - **Fallback Strategies**: Web search when RAG returns no results
 
+### Batch runner
+- `scripts/run_batch_questions_chat_eval.py` supports `--print-config` to print masked backend config and embeds it into the run’s JSONL/Markdown outputs for traceability.
+
 ### Inspector RAG flow
 - Default behavior: single pass — `RAG → optional Web → Synthesis`.
 - Web augmentation can run once when RAG is empty, or when `USE_WEB_AUGMENT=1` and the query matches keywords.

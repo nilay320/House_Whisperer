@@ -77,6 +77,25 @@ def fetch_masked_config(api_url: str) -> dict | None:
         return None
 
 
+def summarize_config(cfg: dict) -> dict:
+    """Return a concise, masked summary suitable for printing or embedding in reports."""
+    return {
+        "OPENAI_API_KEY": "set" if cfg.get("OPENAI_API_KEY") and cfg["OPENAI_API_KEY"] != "not set" else "not set",
+        "QDRANT_URL": "set" if cfg.get("QDRANT_URL") else "not set",
+        "QDRANT_API_KEY": "set" if cfg.get("QDRANT_API_KEY") and cfg["QDRANT_API_KEY"] != "not set" else "not set",
+        "TAVILY_API_KEY": "set" if cfg.get("TAVILY_API_KEY") and cfg["TAVILY_API_KEY"] != "not set" else "not set",
+        "USE_POLICY_LOOP": cfg.get("USE_POLICY_LOOP"),
+        "POLICY_STEP_CAP": cfg.get("POLICY_STEP_CAP"),
+        "USE_WEB_AUGMENT": cfg.get("USE_WEB_AUGMENT"),
+        "WEB_TOOL_FETCH_LIMIT": cfg.get("WEB_TOOL_FETCH_LIMIT"),
+        "WEB_AUGMENT_MAX": cfg.get("WEB_AUGMENT_MAX"),
+        "WEB_MIN_SCORE_GENERIC": cfg.get("WEB_MIN_SCORE_GENERIC"),
+        "WEB_MIN_SCORE_RECALL": cfg.get("WEB_MIN_SCORE_RECALL"),
+        "ALLOWED_ORIGINS": cfg.get("ALLOWED_ORIGINS"),
+        "PORT": cfg.get("PORT"),
+    }
+
+
 def to_markdown_row(idx: int, q: str, ans: str, elapsed_ms: int) -> str:
     q_short = q.replace("|", r"\|")
     return f"| {idx} | {elapsed_ms} | {q_short} | {len(ans)} |"
@@ -88,7 +107,13 @@ def sanitize_suffix(suffix: str) -> str:
     return re.sub(r"[^A-Za-z0-9_\-]", "", s)
 
 
-def save_outputs(results: list[dict], out_dir: Path, suffix: str | None = None) -> None:
+def save_outputs(
+    results: list[dict],
+    out_dir: Path,
+    suffix: str | None = None,
+    run_config_summary: dict | None = None,
+    run_config_full: dict | None = None,
+) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     ts = int(time.time())
     suffix_clean = sanitize_suffix(suffix) if suffix else ""
@@ -98,12 +123,17 @@ def save_outputs(results: list[dict], out_dir: Path, suffix: str | None = None) 
 
     # JSONL
     with jsonl_path.open("w", encoding="utf-8") as f:
+        if run_config_summary is not None:
+            f.write(json.dumps({"type": "run_config", "summary": run_config_summary, "full": run_config_full}, ensure_ascii=False) + "\n")
         for row in results:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     # Markdown (summary + details)
     with md_path.open("w", encoding="utf-8") as f:
         f.write(f"# Batch Results ({datetime.utcnow().isoformat()}Z)\n\n")
+        if run_config_summary is not None:
+            f.write("## Run config (masked summary)\n\n")
+            f.write("```json\n" + json.dumps(run_config_summary, indent=2, ensure_ascii=False) + "\n```\n\n")
         f.write("| # | elapsed_ms | question | answer_len |\n")
         f.write("|---:|----------:|---------|-----------:|\n")
         for i, row in enumerate(results, 1):
@@ -141,29 +171,15 @@ def main():
     parser.add_argument("--print-config", dest="print_config", action="store_true", help="Fetch and print masked backend /api/config before running")
     args = parser.parse_args()
 
-    # Optional: print masked backend configuration
+    run_cfg = None
+    run_cfg_summary = None
     if args.print_config:
         cfg = fetch_masked_config(args.api)
         if cfg is not None:
+            run_cfg = cfg
+            run_cfg_summary = summarize_config(cfg)
             print("\nBackend /api/config (masked):")
-            # Print a compact summary first
-            summary = {
-                "OPENAI_API_KEY": "set" if cfg.get("OPENAI_API_KEY") and cfg["OPENAI_API_KEY"] != "not set" else "not set",
-                "QDRANT_URL": "set" if cfg.get("QDRANT_URL") else "not set",
-                "QDRANT_API_KEY": "set" if cfg.get("QDRANT_API_KEY") and cfg["QDRANT_API_KEY"] != "not set" else "not set",
-                "TAVILY_API_KEY": "set" if cfg.get("TAVILY_API_KEY") and cfg["TAVILY_API_KEY"] != "not set" else "not set",
-                "USE_POLICY_LOOP": cfg.get("USE_POLICY_LOOP"),
-                "POLICY_STEP_CAP": cfg.get("POLICY_STEP_CAP"),
-                "USE_WEB_AUGMENT": cfg.get("USE_WEB_AUGMENT"),
-                "WEB_TOOL_FETCH_LIMIT": cfg.get("WEB_TOOL_FETCH_LIMIT"),
-                "WEB_AUGMENT_MAX": cfg.get("WEB_AUGMENT_MAX"),
-                "WEB_MIN_SCORE_GENERIC": cfg.get("WEB_MIN_SCORE_GENERIC"),
-                "WEB_MIN_SCORE_RECALL": cfg.get("WEB_MIN_SCORE_RECALL"),
-                "ALLOWED_ORIGINS": cfg.get("ALLOWED_ORIGINS"),
-                "PORT": cfg.get("PORT"),
-            }
-            print(json.dumps(summary, indent=2, ensure_ascii=False))
-            # Full blob (still masked) for completeness
+            print(json.dumps(run_cfg_summary, indent=2, ensure_ascii=False))
             print("\nFull config blob (masked):")
             print(json.dumps(cfg, indent=2, ensure_ascii=False))
             print()
@@ -185,7 +201,7 @@ def main():
         })
         print(f"✓ {elapsed_ms} ms | {q[:80]}")
 
-    save_outputs(results, out_dir, args.suffix)
+    save_outputs(results, out_dir, args.suffix, run_config_summary=run_cfg_summary, run_config_full=run_cfg)
 
 
 if __name__ == "__main__":

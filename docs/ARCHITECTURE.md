@@ -47,6 +47,7 @@ flowchart TD
     - Nodes: `policy` → `rag_tool` → conditional `web_tool` → `synthesis` → `END`
     - One-pass web augmentation triggered by keywords when enabled
     - Retrieval via Qdrant; synthesis via OpenAI
+    - Inspector RAG optional policy loop: enable `USE_POLICY_LOOP=1` to allow a short plan–act–observe cycle (bounded by `POLICY_STEP_CAP`); otherwise the fast single-pass path runs. Future graphs will document their own control settings.
   - Web search tools (`api/web_search_tools.py`) powered by Tavily, with detailed filtering logs
   - Config endpoint `GET /api/config` returns masked, effective configuration values
 

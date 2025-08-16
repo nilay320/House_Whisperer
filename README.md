@@ -94,6 +94,14 @@ npm start
 - **Real-time Streaming**: SSE for progress updates during search
 - **Fallback Strategies**: Web search when RAG returns no results
 
+### Inspector RAG: agentic policy loop (optional)
+- Default behavior (fast path): single pass — `RAG → optional Web → Synthesis`.
+- Optional loop: set `USE_POLICY_LOOP=1` to enable a capped plan–act–observe cycle before synthesis.
+  - Cap with `POLICY_STEP_CAP` (e.g., 3) to bound latency.
+  - Useful for tricky queries where one pass of RAG or Web may be insufficient.
+- Implementation lives in `api/langgraph_inspector_rag.py` (nodes: `policy_node`, `rag_tool_node`, `web_tool_node`, `synthesis_node`).
+ - Scope: this toggle applies to the Inspector RAG graph only. Future graphs (e.g., report writing) will document their own control loops separately.
+
 ## 🔍 Example Queries
 
 - "What are the electrical inspection requirements in NC?"

@@ -61,6 +61,22 @@ def ask(api_url: str, question: str) -> tuple[str, list[dict]]:
     return ("".join(answer_chunks).strip(), sources)
 
 
+def fetch_masked_config(api_url: str) -> dict | None:
+    """Fetch masked backend config for observability. Returns dict or None on error."""
+    try:
+        url = f"{api_url.rstrip('/')}/api/config"
+        r = requests.get(url, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+        # Unwrap {"config": {...}} shape if the API wraps it
+        if isinstance(data, dict) and isinstance(data.get("config"), dict):
+            return data["config"]
+        return data
+    except Exception as exc:
+        print(f"Warning: failed to fetch /api/config from {api_url}: {exc}")
+        return None
+
+
 def to_markdown_row(idx: int, q: str, ans: str, elapsed_ms: int) -> str:
     q_short = q.replace("|", r"\|")
     return f"| {idx} | {elapsed_ms} | {q_short} | {len(ans)} |"
@@ -122,7 +138,35 @@ def main():
     parser.add_argument("--in", dest="infile", default="scripts/questions.txt", help="Text file with one question per line")
     parser.add_argument("--out", dest="outdir", default="scripts/output", help="Output directory")
     parser.add_argument("--filesuffix", dest="suffix", default="", help="Optional suffix to append to output filenames for run labeling")
+    parser.add_argument("--print-config", dest="print_config", action="store_true", help="Fetch and print masked backend /api/config before running")
     args = parser.parse_args()
+
+    # Optional: print masked backend configuration
+    if args.print_config:
+        cfg = fetch_masked_config(args.api)
+        if cfg is not None:
+            print("\nBackend /api/config (masked):")
+            # Print a compact summary first
+            summary = {
+                "OPENAI_API_KEY": "set" if cfg.get("OPENAI_API_KEY") and cfg["OPENAI_API_KEY"] != "not set" else "not set",
+                "QDRANT_URL": "set" if cfg.get("QDRANT_URL") else "not set",
+                "QDRANT_API_KEY": "set" if cfg.get("QDRANT_API_KEY") and cfg["QDRANT_API_KEY"] != "not set" else "not set",
+                "TAVILY_API_KEY": "set" if cfg.get("TAVILY_API_KEY") and cfg["TAVILY_API_KEY"] != "not set" else "not set",
+                "USE_POLICY_LOOP": cfg.get("USE_POLICY_LOOP"),
+                "POLICY_STEP_CAP": cfg.get("POLICY_STEP_CAP"),
+                "USE_WEB_AUGMENT": cfg.get("USE_WEB_AUGMENT"),
+                "WEB_TOOL_FETCH_LIMIT": cfg.get("WEB_TOOL_FETCH_LIMIT"),
+                "WEB_AUGMENT_MAX": cfg.get("WEB_AUGMENT_MAX"),
+                "WEB_MIN_SCORE_GENERIC": cfg.get("WEB_MIN_SCORE_GENERIC"),
+                "WEB_MIN_SCORE_RECALL": cfg.get("WEB_MIN_SCORE_RECALL"),
+                "ALLOWED_ORIGINS": cfg.get("ALLOWED_ORIGINS"),
+                "PORT": cfg.get("PORT"),
+            }
+            print(json.dumps(summary, indent=2, ensure_ascii=False))
+            # Full blob (still masked) for completeness
+            print("\nFull config blob (masked):")
+            print(json.dumps(cfg, indent=2, ensure_ascii=False))
+            print()
 
     questions = read_questions(Path(args.infile))
     out_dir = Path(args.outdir)

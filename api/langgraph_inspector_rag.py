@@ -18,7 +18,6 @@ from langchain_core.tools import tool
 # LangGraph imports
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import create_react_agent
 
 # Qdrant client
 from qdrant_client import QdrantClient
@@ -32,7 +31,6 @@ from web_search_tools import search_web_for_inspection_info
 COLLECTION_NAME = 'inspector-standards-postmidterm'
 EMBEDDING_MODEL = 'text-embedding-3-small'
 CHAT_MODEL = 'gpt-4o-mini'
-USE_REACT_AGENTS = False  # Set to True to use ReAct agents (currently falls back to direct calls)
 # Optional lightweight policy loop (Option A) - retained for fallback but superseded by policy node
 USE_POLICY_LOOP = os.getenv("USE_POLICY_LOOP", "0") == "1"
 # Step cap for policy loop (also used by policy node below)
@@ -198,46 +196,9 @@ def search_inspector_standards(query: str) -> List[Dict[str, Any]]:
         return [{"error": f"Search failed: {str(e)}"}]
 
 # Agent definitions - can be used for true agentic reasoning
-def create_research_agent():
-    """Create the research agent for inspector standards."""
-    system_prompt = """You are a research agent specializing in North Carolina home inspection standards and regulations.
+# Removed legacy ReAct agent scaffolding; we use direct tools for speed and predictability
 
-Your role:
-- Search through inspector standards, building codes, and regulations
-- Provide accurate, detailed information about inspection requirements
-- Focus on InterNACHI standards, NCHILB regulations, and NC building codes
-- Always cite your sources and provide specific details
-
-Use the available tools to search for relevant information. Be thorough and accurate."""
-
-    research_agent = create_react_agent(
-        llm, 
-        [search_inspector_standards],
-        state_modifier=system_prompt
-    )
-    
-    return research_agent
-
-def create_web_search_agent():
-    """Create the web search agent for current information and best practices."""
-    system_prompt = """You are a web research specialist for home inspection topics.
-    
-Your role:
-- Search the web for current information, best practices, and industry updates
-- Find manufacturer information, recalls, and technical specifications
-- Look for practical solutions from experienced inspectors
-- Prioritize trusted sources (InterNACHI, ASHI, CPSC, manufacturers)
-- Focus on North Carolina-specific information when relevant
-
-Use the available search tools to find relevant, current information that complements regulatory requirements."""
-
-    web_search_agent = create_react_agent(
-        llm,
-        [search_web_for_inspection_info],
-        state_modifier=system_prompt
-    )
-    
-    return web_search_agent
+# Removed legacy ReAct agent scaffolding; we use direct tools for speed and predictability
 
 # Supervisor agent following the notebook pattern
 def supervisor_node(state: InspectorRAGState) -> InspectorRAGState:
@@ -578,10 +539,7 @@ def web_tool_node(state: InspectorRAGState) -> InspectorRAGState:
         }
 
 def web_search_node(state: InspectorRAGState) -> InspectorRAGState:
-    """Web search agent node - can use ReAct agent or direct calls.
-    
-    Following the Deep Research pattern for external information gathering.
-    """
+    """Web search agent node using direct calls (fast path)."""
     import time
     search_start = time.time()
     
@@ -591,19 +549,8 @@ def web_search_node(state: InspectorRAGState) -> InspectorRAGState:
         # Ensure clients are initialized
         _initialize_clients()
         
-        if USE_REACT_AGENTS:
-            # Use ReAct agent for true agentic reasoning
-            print("🤖 Using ReAct web search agent...")
-            agent = create_web_search_agent()
-            result = agent.invoke({"messages": [HumanMessage(content=state["question"])]})
-            
-            # Extract results from agent response
-            # For now, fall back to direct search
-            print("⚠️ ReAct agent response parsing not yet implemented, using direct search")
-            web_results = search_web_for_inspection_info.invoke({"query": state["question"]})
-        else:
-            # Direct web search - faster and more predictable
-            web_results = search_web_for_inspection_info.invoke({"query": state["question"]})
+        # Direct web search - faster and more predictable
+        web_results = search_web_for_inspection_info.invoke({"query": state["question"]})
         
         # Convert to Documents for consistency
         web_docs = []

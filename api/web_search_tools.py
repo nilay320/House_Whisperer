@@ -157,6 +157,9 @@ def deduplicate_and_format_sources(
     """
     seen_urls = set()
     unique_results = []
+    raw_count = len(search_results or [])
+    below_threshold_count = 0
+    duplicate_count = 0
     
     for result in search_results:
         url = result.get('url', '')
@@ -164,24 +167,37 @@ def deduplicate_and_format_sources(
         
         # Apply score threshold
         if score < min_score:
-            logger.info(f"   Filtered out low score ({score:.3f}): {result.get('title', '')[:50]}...")
+            below_threshold_count += 1
+            logger.info(f"   Filtered out (score<{min_score:.2f}) {score:.3f}: {result.get('title', '')[:50]}...")
             continue
             
-        if url and url not in seen_urls:
+        if url:
+            if url in seen_urls:
+                duplicate_count += 1
+                logger.info(f"   Filtered out duplicate URL: {url}")
+                continue
             seen_urls.add(url)
-            
-            # Use 'content' field which has the actual useful text, not 'raw_content' which has navigation
-            content = result.get('content', '')
-            if len(content) > max_length:
-                content = content[:max_length] + "..."
-            
-            unique_results.append({
-                **result,
-                'content': content  # This ensures we use the clean content, not raw HTML
-            })
+
+        # Use 'content' field which has the actual useful text, not 'raw_content' which has navigation
+        content = result.get('content', '')
+        if len(content) > max_length:
+            content = content[:max_length] + "..."
+
+        unique_results.append({
+            **result,
+            'content': content  # This ensures we use the clean content, not raw HTML
+        })
     
     # Sort by relevance score
-    return sorted(unique_results, key=lambda x: x.get('score', 0), reverse=True)
+    kept_sorted = sorted(unique_results, key=lambda x: x.get('score', 0), reverse=True)
+    kept_count = len(kept_sorted)
+    try:
+        logger.info(
+            f"🔎 Web filter summary: raw={raw_count}, below_threshold={below_threshold_count}, duplicates={duplicate_count}, kept={kept_count} (min_score={min_score})"
+        )
+    except Exception:
+        pass
+    return kept_sorted
 
 @tool
 def search_web_for_inspection_info(
@@ -207,6 +223,7 @@ def search_web_for_inspection_info(
         Only includes results with score >= min_score
     """
     try:
+        logger.info(f"🛠️ search_web_for_inspection_info params: max_results={max_results}, min_score={min_score:.2f}")
         # Handle async in existing event loop (FastAPI/uvicorn environment)
         try:
             # Try to get the current event loop
@@ -245,15 +262,22 @@ def search_web_for_inspection_info(
         
         # Deduplicate and format with score filtering
         formatted_results = deduplicate_and_format_sources(results, min_score=min_score)
-        
+
         # Convert to format expected by LangGraph
-        return [{
+        final = [{
             "content": r['content'],
             "source": f"{r['source']}: {r['title']}",
             "url": r['url'],
             "score": r['score'],
             "type": "web_resource"  # Different from "regulatory"
         } for r in formatted_results[:max_results]]
+
+        try:
+            logger.info(f"✅ Web results after filtering: {len(formatted_results)}; returned (capped) {len(final)} (cap={max_results})")
+        except Exception:
+            pass
+
+        return final
         
     except Exception as e:
         logger.error(f"Web search tool error: {str(e)}")

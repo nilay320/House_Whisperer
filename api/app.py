@@ -12,8 +12,8 @@ import shutil
 import sys
 from dotenv import load_dotenv
 
-# Load environment variables from .env.local (for local development)
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', 'frontend', '.env.local'))
+# Load environment variables for local development from api/.env
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=False)
 
 # Standard imports for PDF processing and text handling
 import PyPDF2
@@ -42,6 +42,52 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://*.
 # Add the actual production URL when known
 if os.getenv("VERCEL_URL"):
     ALLOWED_ORIGINS.append(f"https://{os.getenv('VERCEL_URL')}")
+
+# ---- Effective config snapshot (masked) ----
+def _mask_secret(value: Optional[str], head: int = 4, tail: int = 2) -> str:
+    """Mask secrets for safe logging/return. Shows head and tail with length."""
+    if not value:
+        return "not set"
+    value = str(value)
+    if len(value) <= head + tail:
+        return "*" * len(value)
+    return f"{value[:head]}...{value[-tail:]} (len={len(value)})"
+
+def get_effective_backend_config() -> dict:
+    """Return effective backend config/environment (secrets masked)."""
+    def csv_list(var_name: str, default: str = ""):
+        raw = os.getenv(var_name, default)
+        items = [s.strip() for s in raw.split(",") if s.strip()]
+        return items
+
+    cfg = {
+        # Secrets masked
+        "OPENAI_API_KEY": _mask_secret(os.getenv("OPENAI_API_KEY")),
+        "QDRANT_API_KEY": _mask_secret(os.getenv("QDRANT_API_KEY")),
+        "TAVILY_API_KEY": _mask_secret(os.getenv("TAVILY_API_KEY")),
+
+        # Non-secrets
+        "QDRANT_URL": os.getenv("QDRANT_URL", ""),
+        "ALLOWED_ORIGINS": ALLOWED_ORIGINS,
+        "USE_POLICY_LOOP": os.getenv("USE_POLICY_LOOP", "0"),
+        "POLICY_STEP_CAP": int(os.getenv("POLICY_STEP_CAP", "3") or 3),
+        "USE_WEB_AUGMENT": os.getenv("USE_WEB_AUGMENT", "0"),
+        "WEB_AUGMENT_KEYWORDS": csv_list("WEB_AUGMENT_KEYWORDS"),
+        "WEB_TOOL_FETCH_LIMIT": int(os.getenv("WEB_TOOL_FETCH_LIMIT", "8") or 8),
+        "WEB_AUGMENT_MAX": int(os.getenv("WEB_AUGMENT_MAX", "5") or 5),
+        "WEB_MIN_SCORE_GENERIC": float(os.getenv("WEB_MIN_SCORE_GENERIC", "0.4") or 0.4),
+        "WEB_MIN_SCORE_RECALL": float(os.getenv("WEB_MIN_SCORE_RECALL", "0.3") or 0.3),
+        "VERCEL_URL": os.getenv("VERCEL_URL"),
+        "VERCEL_REGION": os.getenv("VERCEL_REGION"),
+        "PORT": os.getenv("PORT", "8000"),
+    }
+    return cfg
+
+try:
+    print("🔧 Effective backend config (masked secrets):")
+    print(json.dumps(get_effective_backend_config(), indent=2))
+except Exception as _cfg_err:
+    print(f"⚠️ Could not print effective config: {_cfg_err}")
 
 # Configure CORS (Cross-Origin Resource Sharing) middleware
 # This allows the API to be accessed from different domains/origins
@@ -451,6 +497,14 @@ async def test_rag():
         results["qdrant_direct"] = {"status": "error", "error": str(e)[:100]}
     
     return results
+
+# Safe config endpoint (masked)
+@app.get("/api/config")
+async def get_config():
+    try:
+        return {"config": get_effective_backend_config()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Config error: {str(e)}")
 
 # Define a health check endpoint to verify API status
 @app.get("/api/health")

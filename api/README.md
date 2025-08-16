@@ -1,76 +1,97 @@
-# OpenAI Chat API Backend
+# House Whisperer API (FastAPI)
 
-This is a FastAPI-based backend service that provides a streaming chat interface using OpenAI's API.
+Streaming inspector RAG and utilities for the House Whisperer app. Built with FastAPI, LangGraph, Qdrant, Tavily, and OpenAI.
 
-## Prerequisites
+## Quick start
 
-- Python 3.8 or higher
-- pip (Python package manager)
-- An OpenAI API key
-
-## Setup
-
-1. Create a virtual environment (recommended):
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows, use: venv\Scripts\activate
-```
-
-2. Install the required dependencies:
-```bash
-pip install fastapi uvicorn openai pydantic
-```
-
-## Running the Server
-
-1. Make sure you're in the `api` directory:
+1) Create a virtual environment
 ```bash
 cd api
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 ```
 
-2. Start the server:
+2) Install dependencies
 ```bash
+pip install -r requirements.txt
+```
+
+3) Configure environment
+Create `api/.env` and set at least:
+```
+OPENAI_API_KEY=...
+QDRANT_URL=...
+QDRANT_API_KEY=...
+TAVILY_API_KEY=...
+# Optional web augmentation knobs
+USE_WEB_AUGMENT=0
+WEB_AUGMENT_KEYWORDS=recall,manufacturer,cpsc,best practices,how to,current,update,installation manual,model,serial,2024
+WEB_TOOL_FETCH_LIMIT=8
+WEB_AUGMENT_MAX=5
+WEB_MIN_SCORE_GENERIC=0.4
+WEB_MIN_SCORE_RECALL=0.3
+```
+
+4) Run locally
+```bash
+# from repo root
+uvicorn app:app --reload --port 8000 --app-dir api
+# or from api/
 python app.py
 ```
 
-The server will start on `http://localhost:8000`
+## Endpoints
 
-## API Endpoints
+### POST `/api/chat` (SSE streaming)
+Agentic Inspector RAG over Qdrant with optional one-pass web augmentation.
 
-### Chat Endpoint
-- **URL**: `/api/chat`
-- **Method**: POST
-- **Request Body**:
+Request body
 ```json
-{
-    "developer_message": "string",
-    "user_message": "string",
-    "model": "gpt-4.1-mini",  // optional
-    "api_key": "your-openai-api-key"
-}
+{ "message": "What are the continuing education requirements?", "sessionId": "local" }
 ```
-- **Response**: Streaming text response
 
-### Health Check
-- **URL**: `/api/health`
-- **Method**: GET
-- **Response**: `{"status": "ok"}`
+Response (Server-Sent Events)
+- status: starting/progress/response_start/response_chunk/sources/complete
+- Chunks stream incrementally; client should concatenate `response_chunk` values.
 
-## API Documentation
+Minimal curl (prints events):
+```bash
+curl -N -H "Content-Type: application/json" \
+  -d '{"message":"What are NC inspector CE requirements?","sessionId":"local"}' \
+  http://localhost:8000/api/chat
+```
 
-Once the server is running, you can access the interactive API documentation at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+### POST `/api/legacy_chat`
+Direct OpenAI streaming using developer/user messages. Kept for reference.
 
-## CORS Configuration
+### GET `/api/config`
+Returns the effective runtime configuration with secrets masked.
 
-The API is configured to accept requests from any origin (`*`). This can be modified in the `app.py` file if you need to restrict access to specific domains.
+### GET `/api/test-rag`
+Connectivity and sanity checks (env lengths, sample search, OpenAI/Qdrant probes).
 
-## Error Handling
+### GET `/api/health`
+Basic health plus Qdrant connectivity status.
 
-The API includes basic error handling for:
-- Invalid API keys
-- OpenAI API errors
-- General server errors
+### PDF (demo endpoints)
+- `POST /api/upload_pdf` — upload and index a PDF into an in-memory demo store
+- `POST /api/pdf_chat` — simple RAG over the uploaded PDF demo store
 
-All errors will return a 500 status code with an error message. 
+## How Inspector RAG works (short)
+- LangGraph pipeline: `policy` → `rag_tool` → conditional `web_tool` → `synthesis` → END
+- Retrieval: Qdrant collection `inspector-standards-postmidterm` (threshold 0.55, diversified sources)
+- Web augmentation: one pass when `USE_WEB_AUGMENT=1` and query matches `WEB_AUGMENT_KEYWORDS`, or when RAG returns no context
+- Synthesis: clearly separates regulatory sources and web resources
+
+See `docs/ARCHITECTURE.md` for the diagrams.
+
+## CORS
+Origins are taken from `ALLOWED_ORIGINS` and `VERCEL_URL` (when present). Update env rather than code for deployments.
+
+## Troubleshooting
+- No output from chat: check server logs; verify `OPENAI_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`, and network access
+- Web results always empty: ensure `TAVILY_API_KEY`; check logs for filter summaries; consider lowering `WEB_MIN_SCORE_GENERIC`
+- CORS errors: set correct frontend origin(s) in `ALLOWED_ORIGINS`
+
+## License
+Internal course/demo project.

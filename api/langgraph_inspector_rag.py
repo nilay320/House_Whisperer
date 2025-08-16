@@ -5,7 +5,6 @@ import os
 import json
 from typing import Dict, List, Any, TypedDict, Literal
 from operator import add
-from dotenv import load_dotenv
 
 # LangChain imports
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -27,14 +26,32 @@ from qdrant_client import QdrantClient
 # Import web search tools
 from web_search_tools import search_web_for_inspection_info
 
-# Load environment variables
-load_dotenv()
+# Load environment variables are handled by the FastAPI app on startup
 
 # Configuration
 COLLECTION_NAME = 'inspector-standards-postmidterm'
 EMBEDDING_MODEL = 'text-embedding-3-small'
 CHAT_MODEL = 'gpt-4o-mini'
 USE_REACT_AGENTS = False  # Set to True to use ReAct agents (currently falls back to direct calls)
+# Optional lightweight policy loop (Option A) - retained for fallback but superseded by policy node
+USE_POLICY_LOOP = os.getenv("USE_POLICY_LOOP", "0") == "1"
+# Step cap for policy loop (also used by policy node below)
+MAX_POLICY_STEPS = int(os.getenv("POLICY_STEP_CAP", "3"))
+
+# Web augmentation configuration (opt-in). If enabled, we do one web search pass
+# even when RAG has hits, but only for keyword-triggered queries.
+USE_WEB_AUGMENT = os.getenv("USE_WEB_AUGMENT", "0").strip() == "1"
+WEB_AUGMENT_KEYWORDS_DEFAULT = (
+    "recall,manufacturer,cpsc,best practices,how to,current,update,"
+    "installation manual,model,serial,2024"
+)
+WEB_AUGMENT_KEYWORDS = [
+    s.strip().lower() for s in os.getenv("WEB_AUGMENT_KEYWORDS", WEB_AUGMENT_KEYWORDS_DEFAULT).split(",") if s.strip()
+]
+WEB_TOOL_FETCH_LIMIT = int(os.getenv("WEB_TOOL_FETCH_LIMIT", "8").strip() or 8)
+WEB_AUGMENT_MAX = int(os.getenv("WEB_AUGMENT_MAX", "5").strip() or 5)
+WEB_MIN_SCORE_GENERIC = float(os.getenv("WEB_MIN_SCORE_GENERIC", "0.4").strip() or 0.4)
+WEB_MIN_SCORE_RECALL = float(os.getenv("WEB_MIN_SCORE_RECALL", "0.3").strip() or 0.3)
 
 # Strip whitespace from environment variables on module load
 for key in ['OPENAI_API_KEY', 'QDRANT_URL', 'QDRANT_API_KEY']:
@@ -120,6 +137,8 @@ class InspectorRAGState(TypedDict):
     inspector_sources: List[Dict[str, Any]]
     messages: List[BaseMessage]
     next_agent: str
+    policy_query: str  # latest query proposed by policy
+    policy_steps: int  # persisted step counter for loop control
 
 # Initialize vector store connection to Qdrant Cloud
 def get_vector_store():
@@ -146,7 +165,7 @@ def search_inspector_standards(query: str) -> List[Dict[str, Any]]:
             query_vector=query_embedding,
             limit=6,
             with_payload=True,
-            score_threshold=0.6,  # Add minimum relevance threshold
+            score_threshold=0.55,  # Relax threshold slightly to improve recall
             search_params={"hnsw_ef": 128, "exact": False}  # Faster approximate search
         )
         
@@ -317,8 +336,113 @@ Choose from: research_agent, synthesis_agent, FINISH"""),
             "next_agent": "research_agent"  # Default fallback
         }
 
-def research_node(state: InspectorRAGState) -> InspectorRAGState:
-    """Research agent node - can use ReAct agent or direct calls."""
+def policy_node(state: InspectorRAGState) -> InspectorRAGState:
+    """LLM policy that decides next action: 'rag', 'web', or 'finalize'."""
+    try:
+        question = state.get("question", "")
+        last_summary = ""
+        if state.get("context"):
+            # brief summary signal for planning
+            first = state["context"][0].metadata if state["context"] else {}
+            last_summary = f"ctx:{first.get('source','')} n={len(state['context'])}"
+        if state.get("web_results"):
+            last_summary += f" web={len(state['web_results'])}"
+
+        plan_prompt = (
+            "Decide the next action to answer an NC home inspection standards question.\n"
+            "Prefer 'rag' search first (InterNACHI, NCHILB, NC codes). Use 'web' only if RAG seems insufficient.\n"
+            "Respond JSON: {\"action\": 'rag'|'web'|'finalize', \"query\": <string>}\n"
+            f"Question: {question}\n"
+            f"Signal: {last_summary}\n"
+        )
+        plan_msg = llm.invoke([HumanMessage(content=plan_prompt)])
+        import json as _json
+        text = getattr(plan_msg, 'content', str(plan_msg)) or "{}"
+        try:
+            parsed = _json.loads(text)
+        except Exception:
+            parsed = {"action": "rag", "query": question}
+
+        action = (parsed.get("action") or "rag").lower()
+        query = parsed.get("query") or question
+        return {**state, "next_agent": action, "policy_query": query}
+    except Exception as e:
+        print(f"policy_node error: {e}")
+        return {**state, "next_agent": "rag", "policy_query": state.get("question", "")}
+
+
+def rag_tool_node(state: InspectorRAGState) -> InspectorRAGState:
+    """Execute RAG search and append to context and sources."""
+    try:
+        query = state.get("policy_query") or state.get("question", "")
+        hits = search_inspector_standards.invoke({"query": query})
+        ctx = state.get("context", [])
+        srcs = state.get("inspector_sources", [])
+        steps = int(state.get("policy_steps", 0)) + 1
+        for item in hits or []:
+            if "error" in item:
+                continue
+            doc = Document(
+                page_content=item.get("content", ""),
+                metadata={
+                    "source": item.get("source", "Unknown"),
+                    "category": item.get("category", "Standards"),
+                    "score": float(item.get("score", 0.0)),
+                    "type": item.get("type", "regulatory")
+                }
+            )
+            ctx.append(doc)
+            srcs.append({
+                "source": item.get("source", "Unknown"),
+                "score": float(item.get("score", 0.0)),
+                "type": item.get("type", "regulatory")
+            })
+        return {**state, "context": ctx, "inspector_sources": srcs, "policy_steps": steps}
+    except Exception as e:
+        print(f"rag_tool_node error: {e}")
+        return state
+
+
+def web_tool_node(state: InspectorRAGState) -> InspectorRAGState:
+    """Execute web search and append to web_results and sources."""
+    try:
+        query = state.get("policy_query") or state.get("question", "")
+        # Choose a min_score based on recall/manufacturer intent
+        ql = (query or "").lower()
+        is_recallish = any(k in ql for k in ["recall", "cpsc", "manufacturer", "model", "serial"])
+        min_score = WEB_MIN_SCORE_RECALL if is_recallish else WEB_MIN_SCORE_GENERIC
+        results = search_web_for_inspection_info.invoke({
+            "query": query,
+            "max_results": WEB_TOOL_FETCH_LIMIT,
+            "min_score": min_score
+        })
+        web_docs = state.get("web_results", [])
+        srcs = state.get("inspector_sources", [])
+        steps = int(state.get("policy_steps", 0)) + 1
+        # Only keep top WEB_AUGMENT_MAX for synthesis clarity
+        for res in (results or [])[:WEB_AUGMENT_MAX]:
+            if "error" in res:
+                continue
+            doc = Document(
+                page_content=res.get("content", ""),
+                metadata={
+                    "source": res.get("source", "Unknown"),
+                    "url": res.get("url", ""),
+                    "score": float(res.get("score", 0.0)),
+                    "type": res.get("type", "web_resource")
+                }
+            )
+            web_docs.append(doc)
+            srcs.append({
+                "source": res.get("source", "Unknown"),
+                "url": res.get("url", ""),
+                "type": res.get("type", "web_resource"),
+                "score": float(res.get("score", 0.0))
+            })
+        return {**state, "web_results": web_docs, "inspector_sources": srcs, "policy_steps": steps}
+    except Exception as e:
+        print(f"web_tool_node error: {e}")
+        return state
     import time
     research_start = time.time()
     
@@ -340,6 +464,71 @@ def research_node(state: InspectorRAGState) -> InspectorRAGState:
             # For now, fall back to direct search until we implement proper parsing
             print("⚠️ ReAct agent response parsing not yet implemented, using direct search")
             search_results = search_inspector_standards.invoke({"query": state["question"]})
+        elif USE_POLICY_LOOP:
+            # Lightweight plan-act-observe loop (capped) to refine search or route to web
+            print("🧭 Using lightweight policy loop (Option A)")
+            max_steps = 3
+            step = 0
+            accumulated = []
+            last_obs_summary = ""
+
+            while step < max_steps:
+                step += 1
+                # Plan
+                plan_prompt = (
+                    "You are deciding the next action to answer an NC home inspection standards question.\n"
+                    "Prefer 'rag' search first against standards (InterNACHI, NCHILB, NC codes).\n"
+                    "Use 'web' only if RAG looks insufficient.\n"
+                    "Respond in JSON with fields: action ('rag'|'web'|'finalize'), query (string).\n"
+                    f"Question: {state['question']}\n"
+                    f"LastObservation: {last_obs_summary[:600]}\n"
+                )
+                plan_msg = llm.invoke([HumanMessage(content=plan_prompt)])
+                plan_text = getattr(plan_msg, 'content', str(plan_msg)) or "{}"
+                import json as _json
+                try:
+                    plan = _json.loads(plan_text) if isinstance(plan_text, str) else {}
+                except Exception:
+                    plan = {"action": "rag", "query": state["question"]}
+
+                action = (plan.get("action") or "rag").lower()
+                query = plan.get("query") or state["question"]
+                print(f"🧭 Step {step}: action={action}, query='{query[:80]}'")
+
+                if action == "finalize":
+                    break
+                elif action == "web":
+                    obs = search_web_for_inspection_info.invoke({"query": query})
+                else:
+                    obs = search_inspector_standards.invoke({"query": query})
+
+                # Normalize observation
+                normalized = []
+                for item in obs or []:
+                    if "error" in item:
+                        continue
+                    normalized.append({
+                        "content": item.get("content", ""),
+                        "source": item.get("source", "Unknown"),
+                        "category": item.get("category", "Standards"),
+                        "score": float(item.get("score", 0.0)),
+                        "type": item.get("type", "regulatory")
+                    })
+                accumulated.extend(normalized)
+                if normalized:
+                    top = normalized[0]
+                    last_obs_summary = f"TopSource={top['source']} Score={top['score']:.2f} Items={len(normalized)}"
+                    print(f"📚 Observation: {last_obs_summary}")
+                else:
+                    last_obs_summary = "No relevant items"
+                    print("📚 Observation: none")
+
+            # Fallback if loop produced nothing
+            if not accumulated:
+                print("↩️ Policy loop found nothing, falling back to direct RAG")
+                search_results = search_inspector_standards.invoke({"query": state["question"]})
+            else:
+                search_results = accumulated
         else:
             # Direct search - faster and more predictable
             search_start = time.time()
@@ -631,42 +820,45 @@ def should_continue(state: InspectorRAGState) -> Literal["research_agent", "web_
         return "__end__"
 
 def create_inspector_rag_graph():
-    """Create the multi-agent LangGraph workflow."""
-    # Create the graph
+    """Create the agentic LangGraph workflow with a policy+tools loop."""
     workflow = StateGraph(InspectorRAGState)
-    
-    # Add nodes
-    workflow.add_node("supervisor", supervisor_node)
-    workflow.add_node("research_agent", research_node)
-    workflow.add_node("web_search_agent", web_search_node)
-    workflow.add_node("synthesis_agent", synthesis_node)
-    
-    # Add edges - start with supervisor
-    workflow.add_edge(START, "supervisor")
-    
-    # Conditional routing from supervisor
-    workflow.add_conditional_edges(
-        "supervisor",
-        should_continue,
-        {
-            "research_agent": "research_agent",
-            "web_search_agent": "web_search_agent",
-            "synthesis_agent": "synthesis_agent",
-            "__end__": END
-        }
-    )
-    
-    # All agents return to supervisor
-    workflow.add_edge("research_agent", "supervisor")
-    workflow.add_edge("web_search_agent", "supervisor")
-    workflow.add_edge("synthesis_agent", "supervisor")
-    
-    # Add memory
+
+    # Nodes
+    workflow.add_node("policy", policy_node)
+    workflow.add_node("rag_tool", rag_tool_node)
+    workflow.add_node("web_tool", web_tool_node)
+    workflow.add_node("synthesis", synthesis_node)
+
+    # Start at policy
+    workflow.add_edge(START, "policy")
+    # Always go RAG first with the policy's query
+    workflow.add_edge("policy", "rag_tool")
+
+    # After RAG: if any context, synthesize; else try web once.
+    # If augmentation is enabled and the query matches keywords, do one web pass even with context.
+    def after_rag(state: InspectorRAGState):
+        ctx_len = len(state.get("context", []) or [])
+        if ctx_len == 0:
+            return "web_tool"
+        if USE_WEB_AUGMENT:
+            q = (state.get("policy_query") or state.get("question", "")).lower()
+            if any(k in q for k in WEB_AUGMENT_KEYWORDS):
+                return "web_tool"
+        return "synthesis"
+
+    workflow.add_conditional_edges("rag_tool", after_rag, {
+        "synthesis": "synthesis",
+        "web_tool": "web_tool",
+    })
+
+    # After web: always synthesize
+    workflow.add_edge("web_tool", "synthesis")
+
+    # End after synthesis
+    workflow.add_edge("synthesis", END)
+
     memory = MemorySaver()
-    
-    # Compile the graph
     app = workflow.compile(checkpointer=memory)
-    
     return app
 
 async def query_inspector_rag_streaming(question: str, thread_id: str = "default"):

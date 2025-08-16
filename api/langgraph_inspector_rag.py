@@ -515,7 +515,7 @@ def synthesis_node(state: InspectorRAGState) -> InspectorRAGState:
         - If the sources provide relevant information, summarize what you found even if it doesn't completely answer the question
         - If no relevant information is found, say "I couldn't find relevant information in the available sources"
         - Include specific details, standards, and procedures from the sources
-        - Cite which sources you're referencing, including URLs for web resources when relevant
+        - Do NOT include a separate "Sources" or "References" section; the application will display sources from the trace. You may mention source names inline if helpful, but do not list URLs.
         - When presenting information from web sources, include key details and findings
         - Format professionally for working home inspectors
         - Keep response focused and relevant to the question"""

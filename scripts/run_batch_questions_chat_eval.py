@@ -84,8 +84,6 @@ def summarize_config(cfg: dict) -> dict:
         "QDRANT_URL": "set" if cfg.get("QDRANT_URL") else "not set",
         "QDRANT_API_KEY": "set" if cfg.get("QDRANT_API_KEY") and cfg["QDRANT_API_KEY"] != "not set" else "not set",
         "TAVILY_API_KEY": "set" if cfg.get("TAVILY_API_KEY") and cfg["TAVILY_API_KEY"] != "not set" else "not set",
-        "USE_POLICY_LOOP": cfg.get("USE_POLICY_LOOP"),
-        "POLICY_STEP_CAP": cfg.get("POLICY_STEP_CAP"),
         "USE_WEB_AUGMENT": cfg.get("USE_WEB_AUGMENT"),
         "WEB_TOOL_FETCH_LIMIT": cfg.get("WEB_TOOL_FETCH_LIMIT"),
         "WEB_AUGMENT_MAX": cfg.get("WEB_AUGMENT_MAX"),

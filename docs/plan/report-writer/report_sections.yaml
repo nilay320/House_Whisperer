@@ -1,0 +1,59 @@
+# Canonical report sections for House Whisperer draft generation
+# Keys are stable identifiers; labels are user-facing.
+# You can comment out or reorder sections for Demo Day subset.
+
+sections:
+  - key: structure
+    label: Structure
+    includes: [foundation, framing, crawlspace/basement, attic structure]
+  - key: roof
+    label: Roof
+    includes: [covering, flashings, penetrations, gutters/downspouts]
+  - key: exterior
+    label: Exterior
+    includes: [siding/trim, grading/drainage, walks/drive, decks/porches/steps, exterior doors]
+  - key: garage
+    label: Garage / Carport
+    includes: [overhead door/auto-reverse, structure, fire separation]
+  - key: interior
+    label: Interior
+    includes: [walls/ceilings/floors, doors, windows, stairs/rails, smoke/CO alarms]
+  - key: kitchen
+    label: Kitchen
+    includes: [cabinets/counters, sink/faucet/GFCI, appliances]
+  - key: bathrooms
+    label: Bathrooms
+    includes: [fixtures/vanity, toilets, tub/shower, ventilation/GFCI]
+  - key: laundry
+    label: Laundry
+    includes: [washer hookups/pan, dryer vent, sink/GFCI]
+  - key: plumbing
+    label: Plumbing
+    includes: [supply piping, DWV, water heater, fuel piping]
+  - key: electrical
+    label: Electrical
+    includes: [service/meter, panels, grounding/bonding, branch circuits, GFCI/AFCI, lighting]
+  - key: hvac
+    label: HVAC
+    includes: [heating equipment, cooling equipment, distribution, controls, condensate]
+  - key: insulation_ventilation
+    label: Insulation & Ventilation
+    includes: [attic/crawl insulation, attic/crawl ventilation, air sealing]
+  - key: fireplaces_chimneys
+    label: Fireplaces & Chimneys
+    includes: [firebox/damper, flue/chimney, gas logs]
+  - key: site_drainage
+    label: Site & Drainage
+    includes: [grading, swales, vegetation clearance, surface drainage, retaining walls]
+  - key: environmental
+    label: Environmental (visual)
+    includes: [moisture intrusion, microbial growth indications, asbestos/lead disclaimers]
+  - key: pools_spas
+    label: Pools & Spas (if present)
+    includes: [barrier, equipment, surfaces, plumbing, electrical bonding/GFCI]
+  - key: outbuildings
+    label: Outbuildings (limited)
+    includes: [detached structures]
+  - key: summary
+    label: Summary
+    includes: [major defects, safety hazards, items to monitor, maintenance]

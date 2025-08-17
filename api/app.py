@@ -11,6 +11,20 @@ from typing import Optional
 import shutil
 import sys
 from dotenv import load_dotenv
+from uuid import uuid4
+import asyncio
+import httpx
+import json as _json
+import yaml
+from functools import lru_cache
+
+# Optional: Firebase Admin to persist transcripts to Firestore
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore as admin_firestore
+    _FIREBASE_AVAILABLE = True
+except Exception:
+    _FIREBASE_AVAILABLE = False
 
 # Load environment variables for local development from api/.env
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=False)
@@ -105,6 +119,314 @@ PDF_UPLOAD_DIR = "/tmp"  # Use /tmp for temporary file storage
 
 # Global variable to store vector databases for uploaded PDFs
 pdf_vector_dbs = {}
+admin_db = None  # Firestore admin client (set on startup if available)
+_ADMIN_WARN_SHOWN = False
+
+# -------------------------
+# In-memory POC storage for Inspections & Clips (Phase 1)
+# -------------------------
+class CreateInspectionRequest(BaseModel):
+    name: Optional[str] = None
+
+
+class Inspection(BaseModel):
+    id: str
+    name: Optional[str] = None
+
+
+class CreateClipRequest(BaseModel):
+    audio_url: str
+    photos: Optional[list[dict]] = None  # [{id,url,user_caption?}]
+    notes: Optional[str] = None
+    clip_id: Optional[str] = None
+
+
+class Clip(BaseModel):
+    id: str
+    inspection_id: str
+    audio_url: str
+    photos: list[dict]
+    notes: Optional[str] = None
+    status: str = "queued"  # queued | processing | done | error
+    transcript: Optional[str] = None
+    error: Optional[str] = None
+
+
+_INSPECTIONS: dict[str, Inspection] = {}
+_CLIPS: dict[str, Clip] = {}
+
+# Simple async queue for auto-transcription
+_TRANSCRIBE_QUEUE: asyncio.Queue[str] = asyncio.Queue()
+
+USE_AUTO_TRANSCRIBE = os.getenv("USE_AUTO_TRANSCRIBE", "1") == "1"
+
+# Backend timeouts (allow >= 2-minute clips comfortably)
+DOWNLOAD_TIMEOUT_SEC = int(os.getenv("AUDIO_DOWNLOAD_TIMEOUT_SEC", "300") or 300)
+WHISPER_TIMEOUT_SEC = int(os.getenv("WHISPER_TIMEOUT_SEC", "300") or 300)
+
+
+async def _refresh_inspection_status(inspection_id: str):
+    """Recompute inspection status in Firestore based on clip statuses."""
+    try:
+        if not admin_db:
+            return
+        clips_ref = admin_db.collection("inspections").document(inspection_id).collection("clips")
+        clips = list(clips_ref.stream())
+        total = 0
+        done = 0
+        error = 0
+        queued = 0
+        processing = 0
+        for d in clips:
+            data = d.to_dict() or {}
+            # Ignore placeholder docs that do not have an audio URL
+            if not (data.get("audioUrl") or data.get("audio_url")):
+                continue
+            total += 1
+            st = data.get("status")
+            if st == "done":
+                done += 1
+            elif st == "error":
+                error += 1
+            elif st == "processing":
+                processing += 1
+            else:
+                queued += 1
+        if total == 0:
+            status = "empty"
+        elif done == total:
+            status = "done"
+        elif error > 0:
+            status = "attention"
+        else:
+            status = "in_progress"
+        admin_db.collection("inspections").document(inspection_id).set({
+            "status": status,
+            "counts": {
+                "total": total,
+                "done": done,
+                "error": error,
+                "queued": queued,
+                "processing": processing,
+            }
+        }, merge=True)
+    except Exception as e:
+        print(f"⚠️ Failed to refresh inspection status: {e}")
+
+
+async def _scan_and_enqueue_queued_from_firestore():
+    """On startup, re-enqueue any clips stuck in queued/processing in Firestore.
+    This ensures resilience across backend restarts.
+    """
+    if not admin_db:
+        return
+    try:
+        q = admin_db.collection_group("clips").where("status", "in", ["queued", "processing"])  # type: ignore[arg-type]
+        docs = list(q.stream())
+        to_enqueue: list[str] = []
+        for d in docs:
+            data = d.to_dict() or {}
+            clip_id = d.id
+            inspection_ref = d.reference.parent.parent
+            inspection_id = inspection_ref.id if inspection_ref else data.get("inspectionId")
+            audio_url = data.get("audioUrl") or data.get("audio_url")
+            photos = data.get("photos") or []
+            notes = data.get("notes") or None
+            if not inspection_id or not audio_url:
+                print(f"⚠️ Skipping clip {clip_id}: missing inspection_id or audio_url")
+                continue
+            if clip_id not in _CLIPS:
+                _CLIPS[clip_id] = Clip(
+                    id=clip_id,
+                    inspection_id=inspection_id,
+                    audio_url=audio_url,
+                    photos=photos,
+                    notes=notes,
+                    status="queued",
+                )
+            to_enqueue.append(clip_id)
+        if to_enqueue:
+            print(f"🔁 Re-enqueuing {len(to_enqueue)} clip(s) from Firestore (queued/processing): {to_enqueue}")
+            for cid in to_enqueue:
+                await _TRANSCRIBE_QUEUE.put(cid)
+        else:
+            print("🔁 No queued/processing clips found to re-enqueue")
+    except Exception as e:
+        print(f"⚠️ Startup re-enqueue scan failed: {e}")
+
+
+async def _enqueue_specific_clip(clip_id: str) -> bool:
+    if not admin_db:
+        return False
+    try:
+        # Scan collection group for the specific clip document id
+        docs = list(admin_db.collection_group("clips").stream())
+        for d in docs:
+            if d.id != clip_id:
+                continue
+            data = d.to_dict() or {}
+            inspection_ref = d.reference.parent.parent
+            inspection_id = inspection_ref.id if inspection_ref else data.get("inspectionId")
+            audio_url = data.get("audioUrl") or data.get("audio_url")
+            photos = data.get("photos") or []
+            notes = data.get("notes") or None
+            if not inspection_id or not audio_url:
+                print(f"⚠️ Cannot enqueue {clip_id}: missing inspection_id or audio_url")
+                return False
+            _CLIPS[clip_id] = Clip(
+                id=clip_id,
+                inspection_id=inspection_id,
+                audio_url=audio_url,
+                photos=photos,
+                notes=notes,
+                status="queued",
+            )
+            await _TRANSCRIBE_QUEUE.put(clip_id)
+            print(f"➡️ Enqueued specific clip {clip_id} for transcription")
+            return True
+        print(f"⚠️ Clip {clip_id} not found in Firestore collection group")
+        return False
+    except Exception as e:
+        print(f"⚠️ enqueue_specific_clip failed: {e}")
+        return False
+
+
+async def _recompute_all_inspection_counts():
+    if not admin_db:
+        return
+    try:
+        docs = list(admin_db.collection("inspections").stream())
+        for d in docs:
+            await _refresh_inspection_status(d.id)
+        print(f"🧮 Recomputed counts/status for {len(docs)} inspection(s)")
+    except Exception as e:
+        print(f"⚠️ Recompute-all failed: {e}")
+
+
+async def _worker_transcribe_loop():
+    """Background worker that downloads clip audio and runs transcription."""
+    client = OpenAI(api_key=OPENAI_API_KEY, timeout=WHISPER_TIMEOUT_SEC)
+    while True:
+        clip_id = await _TRANSCRIBE_QUEUE.get()
+        try:
+            clip = _CLIPS.get(clip_id)
+            if not clip:
+                print(f"⚠️ Worker received unknown clip_id {clip_id}; skipping")
+                _TRANSCRIBE_QUEUE.task_done()
+                continue
+            print(f"🎧 Processing clip {clip.id} (inspection {clip.inspection_id})")
+            clip.status = "processing"
+            # Firestore: mark processing
+            try:
+                if admin_db and clip.inspection_id:
+                    admin_db.collection("inspections").document(clip.inspection_id).collection("clips").document(clip.id).set({
+                        "status": "processing"
+                    }, merge=True)
+            except Exception as e:
+                print(f"⚠️ Firestore update (processing) failed: {e}")
+
+            # Download audio bytes
+            async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT_SEC) as aclient:
+                resp = await aclient.get(clip.audio_url)
+                resp.raise_for_status()
+                audio_bytes = resp.content
+
+            buf = BytesIO(audio_bytes)
+            buf.name = "audio.m4a"
+
+            # Transcribe via Whisper
+            try:
+                result = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=buf,
+                    response_format="text",
+                )
+                transcript_text = result if isinstance(result, str) else getattr(result, "text", None) or str(result)
+            except Exception as e:  # fallback to chat if needed
+                print(f"⚠️ Whisper error for clip {clip.id}: {e}")
+                transcript_text = f"[transcription_error:{e}]"
+
+            clip.transcript = transcript_text
+            clip.status = "done"
+            try:
+                if admin_db and clip.inspection_id:
+                    admin_db.collection("inspections").document(clip.inspection_id).collection("clips").document(clip.id).set({
+                        "status": "done",
+                        "transcript": transcript_text
+                    }, merge=True)
+                    await _refresh_inspection_status(clip.inspection_id)
+            except Exception as e:
+                print(f"⚠️ Firestore update (done) failed: {e}")
+            print(f"✅ Finished clip {clip.id}")
+        except Exception as e:
+            clip = _CLIPS.get(clip_id)
+            if clip:
+                clip.status = "error"
+                clip.error = str(e)[:500]
+                try:
+                    if admin_db and clip.inspection_id:
+                        admin_db.collection("inspections").document(clip.inspection_id).collection("clips").document(clip.id).set({
+                            "status": "error",
+                            "error": clip.error
+                        }, merge=True)
+                        await _refresh_inspection_status(clip.inspection_id)
+                except Exception as e2:
+                    print(f"⚠️ Firestore update (error) failed: {e2}")
+            print(f"❌ Worker failed on clip {clip_id}: {e}")
+        finally:
+            _TRANSCRIBE_QUEUE.task_done()
+
+
+@app.on_event("startup")
+async def _startup_background_workers():
+    if USE_AUTO_TRANSCRIBE:
+        # Initialize Firebase Admin if possible (for Firestore updates)
+        global admin_db
+        if _FIREBASE_AVAILABLE and not getattr(firebase_admin, "_apps", []):
+            svc_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+            if svc_json:
+                try:
+                    cred = credentials.Certificate(_json.loads(svc_json))
+                    firebase_admin.initialize_app(cred)
+                    admin_db = admin_firestore.client()
+                    print("✅ Firebase Admin initialized for Firestore updates")
+                except Exception as e:
+                    print(f"⚠️ Firebase Admin init failed: {e}")
+            else:
+                print("❌ FIREBASE_SERVICE_ACCOUNT_JSON not set; Firestore updates DISABLED (set this in api/.env)")
+        elif _FIREBASE_AVAILABLE and getattr(firebase_admin, "_apps", []):
+            admin_db = admin_firestore.client()
+        else:
+            print("❌ firebase_admin library not available; install firebase-admin or disable Firestore updates")
+        if not admin_db:
+            print("❌ Firebase Admin NOT initialized. Transcripts will NOT be written to Firestore; UI will not update in real time.")
+        # Start worker and re-enqueue any pending clips
+        asyncio.create_task(_worker_transcribe_loop())
+        await _scan_and_enqueue_queued_from_firestore()
+        # Backfill counts/status so the list has accurate totals immediately
+        await _recompute_all_inspection_counts()
+
+# Manual endpoint to recompute counts/status if needed
+@app.post("/api/admin/recompute_counts")
+async def recompute_counts_admin():
+    if not admin_db:
+        raise HTTPException(status_code=400, detail="Firebase Admin not initialized")
+    await _recompute_all_inspection_counts()
+    return {"ok": True}
+
+@app.post("/api/admin/requeue_queued")
+async def requeue_queued_admin():
+    if not admin_db:
+        raise HTTPException(status_code=400, detail="Firebase Admin not initialized")
+    await _scan_and_enqueue_queued_from_firestore()
+    return {"ok": True}
+
+@app.post("/api/admin/requeue_clip/{clip_id}")
+async def requeue_clip_admin(clip_id: str):
+    if not admin_db:
+        raise HTTPException(status_code=400, detail="Firebase Admin not initialized")
+    ok = await _enqueue_specific_clip(clip_id)
+    return {"ok": ok}
 
 # Define the data model for chat requests using Pydantic
 # This ensures incoming request data is properly validated
@@ -549,6 +871,195 @@ async def health_check():
             "vercel_region": os.getenv("VERCEL_REGION", "unknown")
         }
     }
+
+@lru_cache(maxsize=1)
+def _load_report_sections() -> list:
+    try:
+        base_dir = os.path.dirname(os.path.dirname(__file__))  # api/..
+        yaml_path = os.path.join(base_dir, 'docs', 'plan', 'report-writer', 'report_sections.yaml')
+        with open(yaml_path, 'r') as f:
+            data = yaml.safe_load(f) or {}
+        sections = data.get('sections') or []
+        # normalize
+        out = []
+        for s in sections:
+            key = (s.get('key') or '').strip()
+            label = (s.get('label') or key).strip()
+            includes = s.get('includes') or []
+            # ensure list of strings
+            inc = [str(x) for x in includes if isinstance(x, (str, int, float))]
+            if key:
+                out.append({'key': key, 'label': label, 'includes': inc})
+        return out
+    except Exception as e:
+        print(f"⚠️ Failed to load report sections YAML: {e}")
+        return []
+
+
+@app.get('/api/report_sections')
+async def get_report_sections():
+    return {'sections': _load_report_sections()}
+
+# -------------------------
+# Inspection & Clips API (POC)
+# -------------------------
+
+
+@app.post("/api/inspections")
+async def create_inspection(req: CreateInspectionRequest):
+    insp_id = str(uuid4())
+    insp = Inspection(id=insp_id, name=req.name)
+    _INSPECTIONS[insp_id] = insp
+    # Persist to Firestore if available so IDs survive restarts
+    try:
+        if admin_db:
+            admin_db.collection("inspections").document(insp_id).set({
+                "name": req.name,
+                "status": "in_progress",
+                "createdAt": admin_firestore.SERVER_TIMESTAMP,
+            }, merge=True)
+    except Exception as e:
+        print(f"⚠️ Firestore write (create_inspection) failed: {e}")
+    return insp.model_dump()
+
+
+@app.get("/api/inspections")
+async def list_inspections():
+    # Prefer Firestore when available
+    if admin_db:
+        try:
+            docs = list(admin_db.collection("inspections").stream())
+            items = []
+            for d in docs:
+                data = d.to_dict() or {}
+                # Live count clips for this inspection (only those with audioUrl)
+                counts = {"total": 0, "done": 0, "error": 0, "queued": 0, "processing": 0}
+                try:
+                    clip_docs = list(admin_db.collection("inspections").document(d.id).collection("clips").stream())
+                    for cd in clip_docs:
+                        clip_data = cd.to_dict() or {}
+                        audio_present = clip_data.get("audioUrl") or clip_data.get("audio_url")
+                        if not audio_present:
+                            continue  # skip placeholder docs
+                        counts["total"] += 1
+                        st = clip_data.get("status")
+                        if st in counts:
+                            counts[st] += 1
+                except Exception as e:
+                    print(f"⚠️ Could not count clips for {d.id}: {e}")
+                # Derive status
+                if counts["total"] == 0:
+                    status = data.get("status") or "in_progress"
+                elif counts["done"] == counts["total"]:
+                    status = "done"
+                elif counts["error"] > 0:
+                    status = "attention"
+                else:
+                    status = "in_progress"
+                items.append({
+                    "id": d.id,
+                    "name": data.get("name"),
+                    "status": status,
+                    "counts": counts,
+                })
+            return {"inspections": items}
+        except Exception as e:
+            print(f"⚠️ Firestore list failed, falling back to in-memory: {e}")
+    # Fallback to in-memory POC
+    global _ADMIN_WARN_SHOWN
+    if not _ADMIN_WARN_SHOWN:
+        print("ℹ️ Listing inspections from in-memory store (Firestore admin not initialized)")
+        _ADMIN_WARN_SHOWN = True
+    items = []
+    for insp in _INSPECTIONS.values():
+        clips = [c for c in _CLIPS.values() if c.inspection_id == insp.id]
+        counts = {
+            "total": len([c for c in clips if c.audio_url]),
+            "queued": sum(1 for c in clips if c.status == "queued"),
+            "processing": sum(1 for c in clips if c.status == "processing"),
+            "done": sum(1 for c in clips if c.status == "done"),
+            "error": sum(1 for c in clips if c.status == "error"),
+        }
+        if counts["total"] == 0:
+            status = "empty"
+        elif counts["done"] == counts["total"]:
+            status = "done"
+        elif counts["error"] > 0:
+            status = "attention"
+        else:
+            status = "in_progress"
+        items.append({
+            "id": insp.id,
+            "name": insp.name,
+            "status": status,
+            "counts": counts,
+        })
+    return {"inspections": items}
+
+
+@app.get("/api/inspections/{inspection_id}")
+async def get_inspection(inspection_id: str):
+    insp = _INSPECTIONS.get(inspection_id)
+    if not insp:
+        raise HTTPException(status_code=404, detail="inspection not found")
+    clips = [c.model_dump() for c in _CLIPS.values() if c.inspection_id == inspection_id]
+    return {"inspection": insp.model_dump(), "clips": clips}
+
+
+@app.post("/api/inspections/{inspection_id}/clips")
+async def create_clip(inspection_id: str, req: CreateClipRequest):
+    # Validate inspection existence in Firestore (preferred) or accept if missing to avoid restart issues
+    try:
+        if admin_db:
+            doc_ref = admin_db.collection("inspections").document(inspection_id)
+            if not doc_ref.get().exists:
+                # Create a minimal inspection doc so downstream writes are consistent
+                doc_ref.set({
+                    "status": "in_progress",
+                    "createdAt": admin_firestore.SERVER_TIMESTAMP,
+                }, merge=True)
+    except Exception as e:
+        print(f"⚠️ Firestore inspection check failed: {e}")
+    if not req.audio_url:
+        raise HTTPException(status_code=400, detail="audio_url is required")
+    global _ADMIN_WARN_SHOWN
+    if not admin_db and not _ADMIN_WARN_SHOWN:
+        print("❌ Firebase Admin NOT initialized — will NOT persist status/transcripts to Firestore. Set FIREBASE_SERVICE_ACCOUNT_JSON in api/.env.")
+        _ADMIN_WARN_SHOWN = True
+    clip_id = req.clip_id or str(uuid4())
+    clip = Clip(
+        id=clip_id,
+        inspection_id=inspection_id,
+        audio_url=req.audio_url,
+        photos=req.photos or [],
+        notes=req.notes or None,
+    )
+    _CLIPS[clip_id] = clip
+    if USE_AUTO_TRANSCRIBE:
+        await _TRANSCRIBE_QUEUE.put(clip_id)
+    # Refresh parent inspection status/counts so the list reflects queued clip counts immediately
+    try:
+        if admin_db:
+            await _refresh_inspection_status(inspection_id)
+    except Exception as e:
+        print(f"⚠️ Refresh after clip create failed: {e}")
+    return clip.model_dump()
+
+
+@app.get("/api/clips/{clip_id}")
+async def get_clip(clip_id: str):
+    clip = _CLIPS.get(clip_id)
+    if not clip:
+        raise HTTPException(status_code=404, detail="clip not found")
+    return clip.model_dump()
+
+
+@app.delete("/api/clips/{clip_id}")
+async def delete_clip(clip_id: str):
+    clip = _CLIPS.pop(clip_id, None)
+    if not clip:
+        raise HTTPException(status_code=404, detail="clip not found")
+    return {"deleted": True, "clip_id": clip_id}
 
 # Entry point for running the application directly
 if __name__ == "__main__":

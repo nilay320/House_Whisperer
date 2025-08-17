@@ -875,18 +875,22 @@ async def health_check():
 @lru_cache(maxsize=1)
 def _load_report_sections() -> list:
     try:
-        base_dir = os.path.dirname(os.path.dirname(__file__))  # api/..
-        yaml_path = os.path.join(base_dir, 'docs', 'plan', 'report-writer', 'report_sections.yaml')
+      	# Prefer local YAML shipped inside api/ for serverless/monorepo deployments
+        base_api = os.path.dirname(__file__)
+        local_yaml = os.path.join(base_api, 'report_sections.yaml')
+        if os.path.exists(local_yaml):
+            yaml_path = local_yaml
+        else:
+            base_dir = os.path.dirname(os.path.dirname(__file__))  # api/..
+            yaml_path = os.path.join(base_dir, 'docs', 'plan', 'report-writer', 'report_sections.yaml')
         with open(yaml_path, 'r') as f:
             data = yaml.safe_load(f) or {}
         sections = data.get('sections') or []
-        # normalize
         out = []
         for s in sections:
             key = (s.get('key') or '').strip()
             label = (s.get('label') or key).strip()
             includes = s.get('includes') or []
-            # ensure list of strings
             inc = [str(x) for x in includes if isinstance(x, (str, int, float))]
             if key:
                 out.append({'key': key, 'label': label, 'includes': inc})

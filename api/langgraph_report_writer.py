@@ -2,6 +2,7 @@ from typing import TypedDict, Optional, List, Dict
 import os, re, yaml
 from datetime import datetime
 from openai import OpenAI
+from langsmith import traceable
 
 # LangGraph
 from langgraph.graph import StateGraph, END, START
@@ -45,6 +46,7 @@ class ReportState(TypedDict, total=False):
     saved: bool
 
 
+@traceable(name="load_data")
 def node_load_data(state: ReportState) -> ReportState:
     inspection_id = state["inspection_id"]
     clips, _ = _collect_inspection_data(inspection_id)
@@ -55,9 +57,12 @@ def node_load_data(state: ReportState) -> ReportState:
         "sections_catalog": sections_catalog,
         "narratives_by_section": narratives_by_section,
     })
+    if os.getenv("REPORT_LOGS") == "1":
+        print(f"[report] load_data: inspection={inspection_id} clips={len(clips)} sections={len(sections_catalog)}")
     return state
 
 
+@traceable(name="group_by_section")
 def node_group_by_section(state: ReportState) -> ReportState:
     clips = state.get("clips", [])
     allowed = set(state.get("sections_filter") or [])
@@ -71,9 +76,80 @@ def node_group_by_section(state: ReportState) -> ReportState:
         # Leave empty; caller can decide to error out
         grouped = {}
     state["grouped"] = grouped
+    if os.getenv("REPORT_LOGS") == "1":
+        print(f"[report] group_by_section: groups={list(grouped.keys())}")
     return state
 
 
+def _retrieve_narratives_for_section(section_key: str, clips: List[Dict], top_k: int = 5, min_score: float = 0.55) -> List[Dict]:
+    """Retrieve narratives from Qdrant filtered by canonical report section key.
+
+    Returns a list of dicts with fields: {text, score, payload}
+    Falls back to empty list on any error or missing config.
+    """
+    try:
+        qdrant_url = (os.getenv('QDRANT_URL') or '').strip()
+        qdrant_key = (os.getenv('QDRANT_API_KEY') or '').strip()
+        collection = os.getenv('QDRANT_COLLECTION', 'narratives_v1')
+        embedding_model = os.getenv('EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
+        if not qdrant_url or not qdrant_key:
+            return []
+
+        # Collect transcript context for this section
+        context = "\n\n".join([(c.get('transcript') or '') for c in clips if c.get('transcript')]).strip()
+        if not context:
+            return []
+
+        # Create embedding
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        emb = client.embeddings.create(model=embedding_model, input=context)
+        vector = emb.data[0].embedding
+
+        from qdrant_client import QdrantClient
+        from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+
+        qc = QdrantClient(url=qdrant_url, api_key=qdrant_key)
+        flt = Filter(must=[FieldCondition(key='section', match=MatchValue(value=section_key))])
+        search_res = qc.search(collection_name=collection, query_vector=vector, limit=top_k, query_filter=flt)
+
+        out: List[Dict] = []
+        for r in search_res:
+            score = float(getattr(r, 'score', 0.0) or 0.0)
+            if score < min_score:
+                continue
+            payload = getattr(r, 'payload', {}) or {}
+            # Compose narrative text from comment_name + comment_text if present
+            name = (payload.get('comment_name') or '').strip()
+            text = (payload.get('comment_text') or '').strip()
+            combined = f"{name}. {text}".strip('. ').strip()
+            out.append({
+                'text': combined or text or name,
+                'score': score,
+                'payload': payload,
+            })
+        return out
+    except Exception:
+        return []
+
+
+@traceable(name="retrieve_narratives")
+def node_retrieve_narratives(state: ReportState) -> ReportState:
+    """Populate state.narratives_by_section using Qdrant filtered search per section."""
+    grouped = state.get('grouped', {})
+    top_k = int(os.getenv('NARRATIVE_TOP_K', '5') or 5)
+    min_score = float(os.getenv('NARRATIVE_MIN_SCORE', '0.55') or 0.55)
+    narratives_by_section: Dict[str, List[Dict]] = {}
+    for key, clips in grouped.items():
+        hits = _retrieve_narratives_for_section(key, clips, top_k=top_k, min_score=min_score)
+        if hits:
+            narratives_by_section[key] = hits
+        if os.getenv("REPORT_LOGS") == "1":
+            print(f"[report] narratives: section={key} hits={len(hits)} top_score={(hits[0]['score'] if hits else 0):.3f}")
+    state['narratives_by_section'] = narratives_by_section
+    return state
+
+
+@traceable(name="assemble_markdown")
 def node_assemble_markdown(state: ReportState) -> ReportState:
     inspection_id = state["inspection_id"]
     grouped = state.get("grouped", {})
@@ -113,17 +189,20 @@ def build_report_graph():
     g = StateGraph(ReportState)
     g.add_node("load_data", node_load_data)
     g.add_node("group_by_section", node_group_by_section)
+    g.add_node("retrieve_narratives", node_retrieve_narratives)
     g.add_node("assemble_markdown", node_assemble_markdown)
     g.add_node("save_draft", node_save_draft)
 
     g.add_edge(START, "load_data")
     g.add_edge("load_data", "group_by_section")
-    g.add_edge("group_by_section", "assemble_markdown")
+    g.add_edge("group_by_section", "retrieve_narratives")
+    g.add_edge("retrieve_narratives", "assemble_markdown")
     g.add_edge("assemble_markdown", "save_draft")
     g.add_edge("save_draft", END)
     return g.compile()
 
 
+@traceable(name="run_report")
 def run_report(inspection_id: str, sections: Optional[List[str]] = None) -> Dict:
     graph = build_report_graph()
     initial: ReportState = {"inspection_id": inspection_id, "sections_filter": sections or []}
@@ -252,6 +331,15 @@ def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], section
                     # Emit Markdown image so renderers can inline it; keep as a bullet
                     safe_cap = cap if cap else ''
                     lines.append(f"  - ![{safe_cap}]({url})")
+        # Suggested narratives (if any)
+        n_hits = narratives_by_section.get(key) or []
+        if n_hits:
+            lines.append("")
+            lines.append("### Suggested narratives\n")
+            for h in n_hits:
+                txt = (h.get('text') or '').strip()
+                if txt:
+                    lines.append(f"- {txt}")
         lines.append("")
 
     markdown = "\n".join(lines).strip() + "\n"

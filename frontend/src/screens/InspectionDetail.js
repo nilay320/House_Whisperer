@@ -326,7 +326,7 @@ export default function InspectionDetail() {
               {clips.map(c => (
                 <div key={c.id} className="border rounded p-3">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-700">ID: <span className="font-mono">{c.id}</span>{c.section && <span className="ml-2 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{c.section}</span>}</div>
+                    <div className="text-sm text-gray-700">ID: <span className="font-mono">{c.id}</span><span title={c.section || 'uncategorized'} className="ml-2 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{c.section ? labelFor(c.section) : 'Uncategorized'}</span></div>
                     <span className={`text-xs px-2 py-1 rounded-full ${c.status==='done'?'bg-green-100 text-green-700':c.status==='processing'?'bg-yellow-100 text-yellow-700':'bg-gray-100 text-gray-700'}`}>{c.status}</span>
                   </div>
                   {c.transcript && <pre className="mt-2 text-sm bg-gray-50 p-2 rounded whitespace-pre-wrap">{c.transcript}</pre>}

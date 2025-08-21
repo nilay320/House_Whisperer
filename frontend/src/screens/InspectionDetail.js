@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkSlug from 'remark-slug';
 import { useParams, Link } from 'react-router-dom';
 import { apiPost, fetchReportSections } from '../services/api';
 import { auth, db, storage } from '../services/firebase';
@@ -215,26 +216,84 @@ export default function InspectionDetail() {
   };
 
   const MarkdownPreview = ({ markdown }) => {
+    // Hooks must not be conditional
+    const containerRef = React.useRef(null);
+    const [headings, setHeadings] = React.useState([]);
+    React.useEffect(() => {
+      const sc = containerRef.current;
+      if (!sc) return;
+      // Only include top-level section headings (h2) to keep TOC concise
+      const els = Array.from(sc.querySelectorAll('h2'));
+      setHeadings(els.map((el) => ({ level: 2, text: el.textContent || '', id: el.id })));
+    }, [markdown]);
+    const renderSeenRef = React.useRef(new Map()); // counts during render
+    const scrollToId = (id) => {
+      const sc = containerRef.current;
+      if (!sc) return;
+      const el = sc.querySelector(`#${id}`);
+      if (!el) return;
+      // Measure sticky header (TOC) and container padding to align the heading precisely
+      const toc = sc.querySelector('[data-toc="1"]');
+      const stickyH = toc ? toc.offsetHeight : 0;
+      const cs = window.getComputedStyle(sc);
+      const padTop = parseFloat(cs.paddingTop || '0') || 0;
+      const offset = stickyH + padTop;
+      // Compute delta within the scroll container for robust positioning
+      const scRect = sc.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const delta = elRect.top - scRect.top;
+      const top = Math.max(sc.scrollTop + delta - offset, 0);
+      sc.scrollTo({ top, behavior: 'smooth' });
+    };
+    const slug = (txt) => (txt || '').toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
     if (!markdown) return null;
     return (
-      <div className="max-h-96 overflow-auto rounded border bg-gray-50 p-3">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          linkTarget="_blank"
-          components={{
-            h1: ({ node, ...props }) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
-            h2: ({ node, ...props }) => <h2 className="text-lg font-semibold mt-4 mb-2" {...props} />,
-            h3: ({ node, ...props }) => <h3 className="font-semibold mt-3 mb-1" {...props} />,
-            p: ({ node, ...props }) => <p className="text-sm leading-6 mb-2" {...props} />,
-            ul: ({ node, ...props }) => <ul className="list-disc ml-5 my-2 text-sm" {...props} />,
-            ol: ({ node, ...props }) => <ol className="list-decimal ml-5 my-2 text-sm" {...props} />,
-            li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-            a: ({ node, ...props }) => <a className="text-blue-600 underline" {...props} />,
-            img: ({ node, ...props }) => <img className="w-full max-w-md max-h-64 object-contain rounded border my-2" {...props} />,
-          }}
-        >
-          {markdown}
-        </ReactMarkdown>
+      <div ref={containerRef} className="max-h-96 overflow-auto rounded-lg border bg-white markdown-preview">
+        {headings.length > 0 && (
+          <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b px-3 py-2" data-toc="1">
+            <div className="text-xs text-gray-700 font-medium mb-2">Table of Contents</div>
+            <div className="flex flex-wrap gap-2">
+              {headings.map(h => (
+                <button key={h.id} onClick={() => scrollToId(h.id)} className={`text-xs px-3 py-1.5 rounded-md border font-medium ${h.level===2 ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'} transition-colors`} title={h.text}>{h.text}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="p-4">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkSlug]}
+            linkTarget="_blank"
+            components={{
+              h1: ({ node, ...props }) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+              h2: ({ node, ...props }) => {
+                const text = String(props.children || '').trim();
+                const base = slug(text);
+                const map = renderSeenRef.current;
+                const k = (map.get(base) || 0) + 1;
+                map.set(base, k);
+                const id = k > 1 ? `${base}-${k}` : base;
+                return <h2 id={id} className="scroll-mt-16 text-lg font-semibold mt-4 mb-2" {...props} />;
+              },
+              h3: ({ node, ...props }) => {
+                const text = String(props.children || '').trim();
+                const base = slug(text);
+                const map = renderSeenRef.current;
+                const k = (map.get(base) || 0) + 1;
+                map.set(base, k);
+                const id = k > 1 ? `${base}-${k}` : base;
+                return <h3 id={id} className="scroll-mt-16 font-semibold mt-3 mb-1" {...props} />;
+              },
+              p: ({ node, ...props }) => <p className="text-sm leading-6 mb-2" {...props} />,
+              ul: ({ node, ...props }) => <ul className="list-disc ml-5 my-2 text-sm" {...props} />,
+              ol: ({ node, ...props }) => <ol className="list-decimal ml-5 my-2 text-sm" {...props} />,
+              li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+              a: ({ node, ...props }) => <a className="text-blue-600 underline" {...props} />,
+              img: ({ node, ...props }) => <img className="w-full max-w-md max-h-64 object-contain rounded border my-2" {...props} />,
+            }}
+          >
+            {markdown}
+          </ReactMarkdown>
+        </div>
       </div>
     );
   };
@@ -285,13 +344,42 @@ export default function InspectionDetail() {
                   {sizeBytes != null && <span> • Size: {(sizeBytes/1024).toFixed(1)} KB</span>}
                   {mimeUsed && <span> • {mimeUsed}</span>}
                 </div>
-                <div className="mt-2 flex gap-2">
-                  <button className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300" onClick={() => { setChunks([]); setPhotos([]); }}>Delete</button>
+                <div className="mt-2 flex gap-3">
+                  <button 
+                    className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-200 hover:border-orange-300 transition-colors font-medium text-sm"
+                    onClick={() => {
+                      if (window.confirm('Clear recording and photos? This cannot be undone.')) {
+                        setChunks([]); 
+                        setPhotos([]);
+                      }
+                    }}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Clear
+                  </button>
                   {canSave ? (
-                    <button className={`px-3 py-2 rounded text-white bg-green-600 hover:bg-green-700`} onClick={saveClip}>Save Clip</button>
+                    <button 
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors font-medium text-sm"
+                      onClick={saveClip}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Save Clip
+                    </button>
                   ) : (
                     <span title="Select a section to enable Save">
-                      <button className={`px-3 py-2 rounded text-white bg-gray-400 cursor-not-allowed`} disabled>Save Clip</button>
+                      <button 
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-white bg-gray-400 cursor-not-allowed font-medium text-sm opacity-60" 
+                        disabled
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Save Clip
+                      </button>
                     </span>
                   )}
                 </div>
@@ -299,18 +387,44 @@ export default function InspectionDetail() {
             )}
             <div className="mt-4">
               <h4 className="font-medium mb-1">Photos</h4>
-              <input type="file" accept="image/*" capture="environment" multiple onChange={(e)=>handlePhotoFiles(e.target.files)} />
+              <div className="relative">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  capture="environment" 
+                  multiple 
+                  onChange={(e)=>handlePhotoFiles(e.target.files)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  id="photo-upload"
+                />
+                <label 
+                  htmlFor="photo-upload"
+                  className="flex items-center justify-center w-full h-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 hover:border-gray-400 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    <span>Add Photos</span>
+                  </div>
+                </label>
+              </div>
               <div className="mt-2 space-y-2">
                 {photos.map((p,i)=>(
                   <div key={i} className="flex items-center gap-2">
                     <span className="text-sm text-gray-600">{p.file?.name}</span>
-                    <input className="border rounded px-2 py-1 text-sm flex-1" placeholder="Caption" value={p.caption} onChange={(e)=>updateCaption(i,e.target.value)} />
+                    <input 
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                      placeholder="Add caption..." 
+                      value={p.caption} 
+                      onChange={(e)=>updateCaption(i,e.target.value)} 
+                    />
                   </div>
                 ))}
               </div>
               <div className="mt-4">
                 <h4 className="font-medium mb-1">Section <span className="text-red-600">*</span></h4>
-                <select className={`border rounded px-2 py-1 text-sm ${needsSection ? 'border-red-500' : ''}`} value={sectionKey} onChange={(e)=>setSectionKey(e.target.value)} aria-invalid={needsSection}>
+                <select className={`w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${needsSection ? 'border-red-500' : 'border-gray-300'}`} value={sectionKey} onChange={(e)=>setSectionKey(e.target.value)} aria-invalid={needsSection}>
                   <option value="">Select section…</option>
                   {sectionOptions.map(opt => (
                     <option key={opt.key} value={opt.key}>{opt.label}</option>
@@ -374,9 +488,9 @@ export default function InspectionDetail() {
         </div>
 
         {/* Report Draft Panel */}
-        <div className="mt-8 bg-white border rounded-lg p-5 shadow-sm">
+        <div className="mt-8 bg-white border rounded-lg p-5 shadow-sm report-draft-panel">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Report Draft</h3>
+            <h3 className="text-lg font-bold text-gray-900">Report Draft</h3>
             <div className="flex items-center gap-2">
               <button className={`px-3 py-2 rounded text-white ${generating?'bg-gray-400':'bg-blue-600 hover:bg-blue-700'}`} onClick={generateDraft} disabled={generating}>
                 {generating ? 'Generating…' : 'Generate Draft'}
@@ -384,7 +498,7 @@ export default function InspectionDetail() {
               <button className={`px-3 py-2 rounded text-white ${publishing || !draft?'bg-gray-400':'bg-green-600 hover:bg-green-700'}`} onClick={publishDraft} disabled={publishing || !draft}>
                 {publishing ? 'Publishing…' : 'Publish Final Draft'}
               </button>
-              <button className={`px-3 py-2 rounded ${!draft?'bg-gray-200 text-gray-500':'bg-gray-100 hover:bg-gray-200'}`} onClick={downloadMarkdown} disabled={!draft}>Download .md</button>
+              <button className={`px-3 py-2 rounded text-white ${!draft?'bg-gray-400':'bg-blue-600 hover:bg-blue-700'} transition-colors`} onClick={downloadMarkdown} disabled={!draft}>Download .md</button>
             </div>
           </div>
           <div className="text-xs text-gray-700 mb-2 flex items-center gap-2">
@@ -399,7 +513,7 @@ export default function InspectionDetail() {
           </div>
           {draft?.sectionMetadata && (
             <div className="mb-3">
-              <div className="text-xs text-gray-500 mb-1">Generation coverage</div>
+              <div className="text-xs text-gray-700 font-medium mb-2">Generation coverage</div>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(draft.sectionMetadata).map(([key, meta]) => {
                   const m = meta || {};
@@ -408,15 +522,15 @@ export default function InspectionDetail() {
                   const minScore = parseFloat(process.env.REACT_APP_NARRATIVE_MIN_SCORE || '0.55');
                   const mode = nCount > 0 ? (topScore < minScore ? 'low' : 'narrative') : 'summary';
                   const style = mode === 'narrative'
-                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    ? 'bg-green-100 text-green-800 border border-green-300 font-medium'
                     : mode === 'low'
-                      ? 'bg-gray-50 text-gray-600 border border-gray-200'
-                      : 'bg-amber-50 text-amber-700 border border-amber-200';
+                      ? 'bg-gray-100 text-gray-700 border border-gray-300 font-medium'
+                      : 'bg-amber-100 text-amber-800 border border-amber-300 font-medium';
                   const label = sectionOptions.find(s => s.key === key)?.label || key;
                   const text = mode === 'narrative' ? `Narrative (n=${nCount})`
                     : mode === 'low' ? `Narrative (low confidence n=${nCount})` : 'Summary';
                   return (
-                    <span key={key} className={`text-xs px-2 py-1 rounded ${style}`} title={`${label}: ${text}`}>
+                    <span key={key} className={`text-xs px-3 py-1.5 rounded-md ${style}`} title={`${label}: ${text}`}>
                       {label}: {text}
                     </span>
                   );

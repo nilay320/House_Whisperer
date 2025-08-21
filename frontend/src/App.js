@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import ChatbotWidget from './components/ChatbotWidget';
+import CyberThemeInit from './components/ThemeToggle';
 import AuthScreen from './screens/AuthScreen';
 import { onAuthStateChange, getUserRole, signOutUser } from './services/firebase';
 import { Home, MessageCircle, BookOpen } from 'lucide-react';
@@ -9,7 +10,7 @@ import StartInspection from './screens/StartInspection';
 import InspectionDetail from './screens/InspectionDetail';
 import InspectionsList from './screens/InspectionsList';
 
-const InspectorShell = () => (
+const InspectorShell = ({ onOpenChat }) => (
   <div className="min-h-screen bg-gray-50 p-6">
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -17,12 +18,14 @@ const InspectorShell = () => (
         <div className="text-sm text-gray-600">Capture clips, ask questions, and generate reports.</div>
       </div>
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg border p-4">
-          <h3 className="font-semibold mb-2">Standards Q&A</h3>
+        <button 
+          onClick={onOpenChat}
+          className="bg-white rounded-lg border p-4 hover:bg-gray-50 transition-colors text-left w-full group"
+        >
+          <h3 className="font-semibold mb-2 group-hover:text-blue-600 transition-colors">Standards Q&A</h3>
           <p className="text-sm text-gray-600 mb-3">Ask about InterNACHI, NCHILB, and NC codes.</p>
-          {/* Floating widget is global; we embed guidance here for now */}
-          <p className="text-xs text-gray-500">Use the chat widget (bottom-right) to ask questions.</p>
-        </div>
+          <p className="text-xs text-blue-600 group-hover:text-blue-700">Click to open chat assistant →</p>
+        </button>
         <div className="bg-white rounded-lg border p-4">
           <h3 className="font-semibold mb-2">Inspections</h3>
           <p className="text-sm text-gray-600">Start a new inspection or open an existing one.</p>
@@ -50,11 +53,21 @@ const RoleRedirect = ({ user, role, loading }) => {
   return null;
 };
 
+// RequireAuth: blocks route content until auth resolved and user exists
+const RequireAuth = ({ user, loading, children }) => {
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50"><p>Loading…</p></div>;
+  }
+  if (!user) return <Navigate to="/" replace />;
+  return children;
+};
+
 function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [roleLoading, setRoleLoading] = useState(false);
+  const chatWidgetRef = useRef(null);
 
   useEffect(() => {
     const unsub = onAuthStateChange(async (u) => {
@@ -92,14 +105,25 @@ function App() {
         }}
       />
 
+      <CyberThemeInit />
       {/* Chatbot Widget - visible to all for now */}
-      <ChatbotWidget />
+      <ChatbotWidget ref={chatWidgetRef} />
+      {process.env.NODE_ENV === 'development' && (
+        <div className="cy-gradient border-b border-white/10">
+          <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+            <div className="text-sm text-gray-600">House Whisperer</div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs px-2 py-1 rounded-full bg-gray-100">Dev</span>
+            </div>
+          </div>
+        </div>
+      )}
       <Routes>
         <Route path="/" element={<RoleRedirect user={user} role={role} loading={loading || roleLoading} />} />
-        <Route path="/inspector" element={user && role === 'inspector' ? <InspectorShell /> : <Navigate to="/" replace />} />
-        <Route path="/inspections" element={<InspectionsList />} />
-        <Route path="/inspection/new" element={<StartInspection />} />
-        <Route path="/inspection/:id" element={<InspectionDetail />} />
+        <Route path="/inspector" element={user && role === 'inspector' ? <InspectorShell onOpenChat={() => chatWidgetRef.current?.openChat()} /> : <Navigate to="/" replace />} />
+        <Route path="/inspections" element={<RequireAuth user={user} loading={loading || roleLoading}><InspectionsList user={user} /></RequireAuth>} />
+        <Route path="/inspection/new" element={<RequireAuth user={user} loading={loading || roleLoading}><StartInspection /></RequireAuth>} />
+        <Route path="/inspection/:id" element={<RequireAuth user={user} loading={loading || roleLoading}><InspectionDetail /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

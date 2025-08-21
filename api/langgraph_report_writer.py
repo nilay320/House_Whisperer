@@ -346,6 +346,7 @@ def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], section
                     safe_cap = cap if cap else ''
                     lines.append(f"  - ![{safe_cap}]({url})")
         # Insert narrative findings (compose) or fallback
+        inserted_hits = []
         if n_hits:
             lines.append("")
             lines.append("### Findings\n")
@@ -353,6 +354,7 @@ def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], section
                 txt = (h.get('text') or '').strip()
                 if txt:
                     lines.append(f"- {txt}")
+                    inserted_hits.append(h)
         else:
             lines.append("")
             lines.append("### Findings\n")
@@ -376,7 +378,10 @@ def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], section
         section_meta[key] = {
             'generationMode': generation_mode,
             'narrativeIds': narrative_ids,
-            'narrativeCount': len(n_hits),
+            # Reflect how many narratives were actually inserted into Findings
+            'narrativeCount': len(inserted_hits) if n_hits else 0,
+            # Optional: total available above threshold
+            'narrativesAvailable': len(n_hits),
             'topScore': top_score,
         }
         lines.append("")

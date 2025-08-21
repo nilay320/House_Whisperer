@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { db } from '../services/firebase';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 
-export default function InspectionsList() {
+export default function InspectionsList({ user }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return; // do not subscribe if not authed
     const qRef = query(collection(db, 'inspections'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(qRef, (snap) => {
       const rows = [];
@@ -26,8 +28,8 @@ export default function InspectionsList() {
       setItems(rows);
       setLoading(false);
     }, () => setLoading(false));
-    return () => unsub();
-  }, []);
+    return () => unsub && unsub();
+  }, [user]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><p>Loading…</p></div>;
 
@@ -35,7 +37,16 @@ export default function InspectionsList() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">My Inspections</h2>
+          <div className="flex items-center gap-4">
+            <Link 
+              to="/inspector" 
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <ArrowLeft size={20} />
+              <span className="text-sm">Back to Dashboard</span>
+            </Link>
+            <h2 className="text-2xl font-bold">My Inspections</h2>
+          </div>
           <Link to="/inspection/new" className="text-sm text-blue-600 hover:underline">Start Inspection</Link>
         </div>
         <div className="bg-white border rounded-lg shadow-sm">

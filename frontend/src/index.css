@@ -2,9 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -33,3 +35,372 @@ code {
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 } 
+
+/* =============================
+   Cyber Theme (opt-in)
+   Toggle by setting document.documentElement.dataset.theme = 'cyber'
+   This layer gently overrides common Tailwind utility colors without structural changes.
+============================= */
+:root {
+  --cy-bg: #0f1115;
+  --cy-panel: #0d1117;
+  --cy-card: rgba(255, 255, 255, 0.04);
+  --cy-text: #cfe6ff;
+  --cy-muted: #9ab3c8;
+  --cy-border: rgba(255, 255, 255, 0.14);
+  --cy-accent: #60f7d2;
+}
+
+[data-theme='cyber'] body { background: var(--cy-bg); color: var(--cy-text); }
+
+/* Panels and cards */
+[data-theme='cyber'] .bg-gray-50 { background-color: var(--cy-bg) !important; }
+[data-theme='cyber'] .bg-white { background-color: var(--cy-card) !important; }
+[data-theme='cyber'] .bg-white\/5 { background-color: var(--cy-card) !important; }
+[data-theme='cyber'] .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3) !important; }
+
+/* Borders */
+[data-theme='cyber'] .border { border-color: var(--cy-border) !important; }
+[data-theme='cyber'] .border-b { border-color: var(--cy-border) !important; }
+
+/* Text */
+[data-theme='cyber'] .text-gray-900 { color: #e8f6ff !important; }
+[data-theme='cyber'] .text-gray-700 { color: var(--cy-text) !important; }
+[data-theme='cyber'] .text-gray-600 { color: var(--cy-muted) !important; }
+[data-theme='cyber'] .text-gray-500 { color: var(--cy-muted) !important; }
+[data-theme='cyber'] a, [data-theme='cyber'] .text-blue-600 { color: var(--cy-accent) !important; }
+
+/* Pills and chips */
+[data-theme='cyber'] .rounded-full { box-shadow: 0 0 0 1px var(--cy-border) inset; }
+[data-theme='cyber'] .bg-green-100 { background-color: rgba(96, 247, 210, .12) !important; color: var(--cy-accent) !important; }
+[data-theme='cyber'] .bg-yellow-100 { background-color: rgba(255, 212, 98, .15) !important; color: #ffd462 !important; }
+[data-theme='cyber'] .bg-red-100 { background-color: rgba(255, 100, 100, .15) !important; color: #ff8a8a !important; }
+[data-theme='cyber'] .bg-gray-100 { background-color: rgba(255,255,255,.08) !important; color: var(--cy-text) !important; }
+
+/* Form elements - ensure good contrast */
+[data-theme='cyber'] select {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+  border-color: #d1d5db !important;
+}
+
+[data-theme='cyber'] select:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+[data-theme='cyber'] option {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+}
+
+/* Custom file upload styling for cyber theme */
+[data-theme='cyber'] label[for="photo-upload"] {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: var(--cy-border) !important;
+  color: var(--cy-text) !important;
+}
+
+[data-theme='cyber'] label[for="photo-upload"]:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--cy-accent) !important;
+}
+
+[data-theme='cyber'] label[for="photo-upload"] svg {
+  color: var(--cy-accent) !important;
+}
+
+/* Text input styling for cyber theme */
+[data-theme='cyber'] input[type="text"] {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+  border-color: #d1d5db !important;
+}
+
+[data-theme='cyber'] input[type="text"]:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+[data-theme='cyber'] input[type="text"]::placeholder {
+  color: #9ca3af !important;
+}
+
+/* Button styling for cyber theme */
+[data-theme='cyber'] .bg-orange-100 {
+  background-color: rgba(255, 165, 0, .15) !important;
+}
+
+[data-theme='cyber'] .text-orange-700 {
+  color: #ff9500 !important;
+}
+
+[data-theme='cyber'] .border-orange-200 {
+  border-color: rgba(255, 165, 0, .3) !important;
+}
+
+[data-theme='cyber'] .hover\:bg-orange-200:hover {
+  background-color: rgba(255, 165, 0, .25) !important;
+}
+
+[data-theme='cyber'] .hover\:border-orange-300:hover {
+  border-color: rgba(255, 165, 0, .4) !important;
+}
+
+[data-theme='cyber'] .bg-green-600 {
+  background-color: #059669 !important;
+}
+
+[data-theme='cyber'] .hover\:bg-green-700:hover {
+  background-color: #047857 !important;
+}
+
+/* Report Draft Panel styling for cyber theme */
+[data-theme='cyber'] .report-draft-panel {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: var(--cy-border) !important;
+  color: #1f2937 !important;
+}
+
+[data-theme='cyber'] .markdown-preview {
+  background-color: #ffffff !important;
+  border-color: var(--cy-border) !important;
+  color: #1f2937 !important;
+}
+
+[data-theme='cyber'] .markdown-preview h1,
+[data-theme='cyber'] .markdown-preview h2,
+[data-theme='cyber'] .markdown-preview h3,
+[data-theme='cyber'] .markdown-preview h4,
+[data-theme='cyber'] .markdown-preview h5,
+[data-theme='cyber'] .markdown-preview h6 {
+  color: #111827 !important;
+}
+
+[data-theme='cyber'] .markdown-preview p,
+[data-theme='cyber'] .markdown-preview li,
+[data-theme='cyber'] .markdown-preview td {
+  color: #374151 !important;
+}
+
+[data-theme='cyber'] .markdown-preview strong {
+  color: #111827 !important;
+}
+
+/* Table of Contents styling */
+[data-theme='cyber'] .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+[data-theme='cyber'] .text-blue-700 {
+  color: #2563eb !important;
+}
+
+[data-theme='cyber'] .border-blue-200 {
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+[data-theme='cyber'] .hover\:bg-blue-100:hover {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+/* Generation coverage badges */
+[data-theme='cyber'] .bg-green-100 {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+}
+
+[data-theme='cyber'] .text-green-800 {
+  color: #166534 !important;
+}
+
+[data-theme='cyber'] .border-green-300 {
+  border-color: rgba(34, 197, 94, 0.3) !important;
+}
+
+[data-theme='cyber'] .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+}
+
+[data-theme='cyber'] .text-amber-800 {
+  color: #92400e !important;
+}
+
+[data-theme='cyber'] .border-amber-300 {
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+/* Fix barely visible text elements */
+[data-theme='cyber'] .report-draft-panel h3 {
+  color: #111827 !important;
+}
+
+[data-theme='cyber'] .report-draft-panel .text-gray-700 {
+  color: #374151 !important;
+}
+
+[data-theme='cyber'] .report-draft-panel .text-gray-500 {
+  color: #6b7280 !important;
+}
+
+/* Download button fix */
+[data-theme='cyber'] .bg-gray-100 {
+  background-color: #f3f4f6 !important;
+  color: #374151 !important;
+}
+
+[data-theme='cyber'] .hover\:bg-gray-200:hover {
+  background-color: #e5e7eb !important;
+}
+
+/* Simple header gradient utility (attach with class="cy-gradient") */
+.cy-gradient {
+  background: radial-gradient(1200px 400px at 10% -10%, rgba(96,247,210,.18), transparent 60%),
+              radial-gradient(1000px 400px at 90% -10%, rgba(96,247,210,.1), transparent 50%),
+              linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,0));
+}
+
+/* Glass card helper (apply on important panels if needed) */
+.cy-glass { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: var(--cy-card); border: 1px solid var(--cy-border); }
+
+/* Chat widget isolation - completely override cyber theme */
+.chat-widget-container {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+  border-color: #d1d5db !important;
+}
+
+.chat-widget-container * {
+  color: inherit !important;
+  border-color: inherit !important;
+}
+
+.chat-widget-container .bg-gray-100 {
+  background-color: #f3f4f6 !important;
+  color: #374151 !important;
+}
+
+.chat-widget-container .bg-blue-600 {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+.chat-widget-container .text-blue-600 {
+  color: #2563eb !important;
+}
+
+.chat-widget-container .text-gray-800 {
+  color: #1f2937 !important;
+}
+
+.chat-widget-container .text-gray-700 {
+  color: #374151 !important;
+}
+
+.chat-widget-container .text-gray-600 {
+  color: #4b5563 !important;
+}
+
+.chat-widget-container .text-gray-500 {
+  color: #6b7280 !important;
+}
+
+.chat-widget-container .border-gray-200 {
+  border-color: #e5e7eb !important;
+}
+
+.chat-widget-container .border-gray-300 {
+  border-color: #d1d5db !important;
+}
+
+/* Fix bold text visibility */
+.chat-widget-container strong,
+.chat-widget-container .font-semibold,
+.chat-widget-container .font-bold {
+  color: #111827 !important;
+  font-weight: 600 !important;
+}
+
+/* Input placeholder styling */
+.chat-widget-container input::placeholder,
+.chat-widget-container textarea::placeholder {
+  color: #9ca3af !important;
+  opacity: 1 !important;
+}
+
+/* Header text override */
+.chat-widget-container .text-white {
+  color: #ffffff !important;
+}
+
+.chat-widget-container .text-blue-100 {
+  color: #dbeafe !important;
+}
+
+/* Input area styling */
+.chat-widget-container .bg-gray-50 {
+  background-color: #f9fafb !important;
+}
+
+.chat-widget-container .bg-white {
+  background-color: #ffffff !important;
+}
+
+.chat-widget-container .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Enhanced typography for chat widget */
+.chat-widget-container {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  line-height: 1.5 !important;
+}
+
+.chat-widget-container h3 {
+  font-weight: 600 !important;
+  font-size: 1.1rem !important;
+  letter-spacing: -0.025em !important;
+}
+
+.chat-widget-container .text-xs {
+  font-size: 0.75rem !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.025em !important;
+}
+
+.chat-widget-container .text-sm {
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+  font-weight: 400 !important;
+}
+
+.chat-widget-container .font-medium {
+  font-weight: 500 !important;
+}
+
+.chat-widget-container .font-semibold {
+  font-weight: 600 !important;
+}
+
+/* Message text styling */
+.chat-widget-container .prose p {
+  font-size: 0.9rem !important;
+  line-height: 1.6 !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.chat-widget-container .prose ul li {
+  font-size: 0.9rem !important;
+  line-height: 1.5 !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.chat-widget-container textarea {
+  font-size: 0.9rem !important;
+  line-height: 1.4 !important;
+  font-weight: 400 !important;
+}
+
+.chat-widget-container textarea::placeholder {
+  font-weight: 400 !important;
+  font-style: normal !important;
+}

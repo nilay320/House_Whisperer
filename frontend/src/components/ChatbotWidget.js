@@ -204,8 +204,15 @@ const formatTime = (timestamp) => {
   });
 };
 
-const ChatbotWidget = () => {
+const ChatbotWidget = React.forwardRef((props, ref) => {
   const [isOpen, setIsOpen] = useState(false);
+  
+  // Expose open function via ref
+  React.useImperativeHandle(ref, () => ({
+    openChat: () => setIsOpen(true),
+    closeChat: () => setIsOpen(false),
+    toggleChat: () => setIsOpen(!isOpen)
+  }));
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -523,7 +530,11 @@ const ChatbotWidget = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
             transition={{ duration: 0.2 }}
-            className="fixed right-4 bottom-20 md:right-6 md:bottom-24 z-40 w-[92vw] max-w-[600px] h-[70vh] md:w-[600px] md:h-[650px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"
+            className="fixed right-4 bottom-20 md:right-6 md:bottom-24 z-40 w-[92vw] max-w-[600px] h-[70vh] md:w-[600px] md:h-[650px] rounded-2xl shadow-2xl border border-gray-200 flex flex-col chat-widget-container"
+            style={{ 
+              backgroundColor: '#ffffff',
+              color: '#1f2937'
+            }}
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl">
@@ -614,8 +625,8 @@ const ChatbotWidget = () => {
             </div>
 
             {/* Input Area */}
-            <div className="p-3 md:p-4 border-t border-gray-200 pb-[max(env(safe-area-inset-bottom),0px)]">
-              <div className="flex items-end space-x-2">
+            <div className="p-4 border-t border-gray-200 bg-gray-50" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+              <div className="flex items-end space-x-3">
                 <div className="flex-1">
                   <textarea
                     ref={inputRef}
@@ -623,17 +634,18 @@ const ChatbotWidget = () => {
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Ask about inspection standards, codes, or regulations..."
-                    className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm md:text-base"
+                    className="w-full resize-none border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white shadow-sm"
                     rows={1}
-                    style={{ minHeight: '40px', maxHeight: '120px' }}
+                    style={{ minHeight: '44px', maxHeight: '120px' }}
                   />
                 </div>
                 <button
                   onClick={handleSendMessage}
                   disabled={!inputValue.trim() || isLoading}
-                  className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex-shrink-0"
+                  style={{ minHeight: '44px', minWidth: '44px' }}
                 >
-                  <Send size={16} />
+                  <Send size={18} />
                 </button>
               </div>
             </div>
@@ -642,6 +654,8 @@ const ChatbotWidget = () => {
       </AnimatePresence>
     </>
   );
-};
+});
+
+ChatbotWidget.displayName = 'ChatbotWidget';
 
 export default ChatbotWidget;

@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useParams, Link } from 'react-router-dom';
 import { apiPost, fetchReportSections } from '../services/api';
 import { auth, db, storage } from '../services/firebase';
@@ -214,23 +216,25 @@ export default function InspectionDetail() {
 
   const MarkdownPreview = ({ markdown }) => {
     if (!markdown) return null;
-    const lines = markdown.split('\n');
     return (
       <div className="max-h-96 overflow-auto rounded border bg-gray-50 p-3">
-        {lines.map((ln, i) => {
-          const img = ln.match(/^\s*-\s*!\[(.*?)\]\((.*?)\)/);
-          if (img) {
-            const alt = img[1] || '';
-            const url = img[2];
-            return (
-              <div key={i} className="my-2">
-                <img src={url} alt={alt} className="w-full max-w-md max-h-64 object-contain rounded border" />
-                {alt ? <div className="text-xs text-gray-500 mt-1">{alt}</div> : null}
-              </div>
-            );
-          }
-          return <p key={i} className="text-sm whitespace-pre-wrap">{ln}</p>;
-        })}
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          linkTarget="_blank"
+          components={{
+            h1: ({ node, ...props }) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+            h2: ({ node, ...props }) => <h2 className="text-lg font-semibold mt-4 mb-2" {...props} />,
+            h3: ({ node, ...props }) => <h3 className="font-semibold mt-3 mb-1" {...props} />,
+            p: ({ node, ...props }) => <p className="text-sm leading-6 mb-2" {...props} />,
+            ul: ({ node, ...props }) => <ul className="list-disc ml-5 my-2 text-sm" {...props} />,
+            ol: ({ node, ...props }) => <ol className="list-decimal ml-5 my-2 text-sm" {...props} />,
+            li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+            a: ({ node, ...props }) => <a className="text-blue-600 underline" {...props} />,
+            img: ({ node, ...props }) => <img className="w-full max-w-md max-h-64 object-contain rounded border my-2" {...props} />,
+          }}
+        >
+          {markdown}
+        </ReactMarkdown>
       </div>
     );
   };
@@ -393,6 +397,33 @@ export default function InspectionDetail() {
               </>
             )}
           </div>
+          {draft?.sectionMetadata && (
+            <div className="mb-3">
+              <div className="text-xs text-gray-500 mb-1">Generation coverage</div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(draft.sectionMetadata).map(([key, meta]) => {
+                  const m = meta || {};
+                  const nCount = m.narrativeCount || 0;
+                  const topScore = typeof m.topScore === 'number' ? m.topScore : 0;
+                  const minScore = parseFloat(process.env.REACT_APP_NARRATIVE_MIN_SCORE || '0.55');
+                  const mode = nCount > 0 ? (topScore < minScore ? 'low' : 'narrative') : 'summary';
+                  const style = mode === 'narrative'
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : mode === 'low'
+                      ? 'bg-gray-50 text-gray-600 border border-gray-200'
+                      : 'bg-amber-50 text-amber-700 border border-amber-200';
+                  const label = sectionOptions.find(s => s.key === key)?.label || key;
+                  const text = mode === 'narrative' ? `Narrative (n=${nCount})`
+                    : mode === 'low' ? `Narrative (low confidence n=${nCount})` : 'Summary';
+                  return (
+                    <span key={key} className={`text-xs px-2 py-1 rounded ${style}`} title={`${label}: ${text}`}>
+                      {label}: {text}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {draft?.markdown ? (
             <MarkdownPreview markdown={draft.markdown} />
           ) : (

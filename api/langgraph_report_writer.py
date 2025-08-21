@@ -44,6 +44,7 @@ class ReportState(TypedDict, total=False):
     section_count: int
     clip_count: int
     saved: bool
+    section_metadata: Dict[str, Dict]
 
 
 @traceable(name="load_data")
@@ -123,6 +124,7 @@ def _retrieve_narratives_for_section(section_key: str, clips: List[Dict], top_k:
             text = (payload.get('comment_text') or '').strip()
             combined = f"{name}. {text}".strip('. ').strip()
             out.append({
+                'id': getattr(r, 'id', None),
                 'text': combined or text or name,
                 'score': score,
                 'payload': payload,
@@ -155,11 +157,12 @@ def node_assemble_markdown(state: ReportState) -> ReportState:
     grouped = state.get("grouped", {})
     sections_catalog = state.get("sections_catalog", [])
     narratives_by_section = state.get("narratives_by_section", {})
-    markdown, section_count, clip_count = _render_markdown(inspection_id, grouped, sections_catalog, narratives_by_section)
+    markdown, section_count, clip_count, section_metadata = _render_markdown(inspection_id, grouped, sections_catalog, narratives_by_section)
     state.update({
         "markdown": markdown,
         "section_count": section_count,
         "clip_count": clip_count,
+        "section_metadata": section_metadata,
     })
     return state
 
@@ -171,12 +174,16 @@ def node_save_draft(state: ReportState) -> ReportState:
     app_mod = _get_app_mod()
     if app_mod.admin_db and markdown:
         try:
+            if os.getenv("REPORT_LOGS") == "1":
+                keys = list((state.get('section_metadata') or {}).keys())
+                print(f"[report] save_draft: section_metadata_keys={keys}")
             app_mod.admin_db.collection('inspections').document(inspection_id).collection('reports').document('draft').set({
                 'markdown': markdown,
                 'generatedAt': app_mod.admin_firestore.SERVER_TIMESTAMP,  # type: ignore[attr-defined]
                 'sectionCount': state.get('section_count', 0),
                 'clipCount': state.get('clip_count', 0),
                 'usedNarratives': bool(state.get('narratives_by_section')),
+                'sectionMetadata': state.get('section_metadata') or {},
             }, merge=True)
             saved = True
         except Exception:
@@ -273,7 +280,7 @@ def _collect_inspection_data(inspection_id: str) -> (List[Dict], int):
     return items, total
 
 
-def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], sections_catalog: List[Dict], narratives_by_section: Dict) -> (str, int, int):
+def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], sections_catalog: List[Dict], narratives_by_section: Dict) -> (str, int, int, Dict[str, Dict]):
     def _label_for(key: str) -> str:
         for s in sections_catalog:
             if s.get('key') == key:
@@ -284,6 +291,7 @@ def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], section
     section_count = len(grouped)
     clip_count = sum(len(v) for v in grouped.values())
     lines: List[str] = []
+    section_meta: Dict[str, Dict] = {}
     lines.append(f"# Home Inspection Draft Report\n")
     lines.append(f"Generated: {now}\n")
     lines.append(f"Inspection ID: {inspection_id}\n")
@@ -297,7 +305,13 @@ def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], section
     for key, clips in grouped.items():
         label = _label_for(key)
         lines.append(f"## {label}\n")
-        # Brief summary
+        # Decide narrative vs summary for this section
+        n_hits = narratives_by_section.get(key) or []
+        generation_mode = 'narrative' if n_hits else 'summary'
+        narrative_ids = [h.get('id') for h in (n_hits[:3] if n_hits else []) if h.get('id') is not None]
+        top_score = float(n_hits[0]['score']) if n_hits else 0.0
+
+        # Brief summary (always provide a summary paragraph first)
         try:
             if client:
                 ctx = "\n\n".join([c.get('transcript') or '' for c in clips if c.get('transcript')])[:4000]
@@ -331,19 +345,44 @@ def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], section
                     # Emit Markdown image so renderers can inline it; keep as a bullet
                     safe_cap = cap if cap else ''
                     lines.append(f"  - ![{safe_cap}]({url})")
-        # Suggested narratives (if any)
-        n_hits = narratives_by_section.get(key) or []
+        # Insert narrative findings (compose) or fallback
         if n_hits:
             lines.append("")
-            lines.append("### Suggested narratives\n")
-            for h in n_hits:
+            lines.append("### Findings\n")
+            for h in n_hits[:3]:
                 txt = (h.get('text') or '').strip()
                 if txt:
                     lines.append(f"- {txt}")
+        else:
+            lines.append("")
+            lines.append("### Findings\n")
+            # Derive neutral findings from transcript first sentences (up to 3)
+            derived: List[str] = []
+            for c in clips:
+                tr = (c.get('transcript') or '').strip()
+                if tr:
+                    first = re.split(r"(?<=[.!?])\s+", tr)[0]
+                    if first and first not in derived:
+                        derived.append(first)
+                if len(derived) >= 3:
+                    break
+            if derived:
+                for dtext in derived:
+                    lines.append(f"- {dtext}")
+            else:
+                lines.append("- No detailed notes were available.")
+
+        # Record per-section metadata
+        section_meta[key] = {
+            'generationMode': generation_mode,
+            'narrativeIds': narrative_ids,
+            'narrativeCount': len(n_hits),
+            'topScore': top_score,
+        }
         lines.append("")
 
     markdown = "\n".join(lines).strip() + "\n"
-    return markdown, section_count, clip_count
+    return markdown, section_count, clip_count, section_meta
 
 
 

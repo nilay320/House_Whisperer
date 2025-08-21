@@ -20,7 +20,9 @@ export const apiPost = async (path, body) => {
 
 export const fetchReportSections = async () => {
   const data = await apiGet('/api/report_sections');
-  return (data.sections || []).map(s => ({ key: s.key, label: s.label, includes: s.includes || [] }));
+  const sections = (data.sections || []).map(s => ({ key: s.key, label: s.label, includes: s.includes || [] }));
+  const required = data.required_sections || [];
+  return { sections, requiredSections: required };
 };
 
 export const getApiBase = () => API_BASE;

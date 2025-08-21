@@ -900,7 +900,9 @@ def _load_report_sections() -> list:
             inc = [str(x) for x in includes if isinstance(x, (str, int, float))]
             if key:
                 out.append({'key': key, 'label': label, 'includes': inc})
-        return out
+        # Attach required list if present
+        required = data.get('required_sections') or []
+        return {'sections': out, 'required_sections': required}
     except Exception as e:
         print(f"⚠️ Failed to load report sections YAML: {e}")
         return []
@@ -908,7 +910,11 @@ def _load_report_sections() -> list:
 
 @app.get('/api/report_sections')
 async def get_report_sections():
-    return {'sections': _load_report_sections()}
+    data = _load_report_sections()
+    # Backward compatibility: if older cache structure, wrap
+    if isinstance(data, list):
+        return {'sections': data, 'required_sections': []}
+    return data
 
 # -------------------------
 # Inspection & Clips API (POC)

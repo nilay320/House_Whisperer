@@ -1,4 +1,6 @@
 # Canonical report sections for House Whisperer draft generation
+# Add required_sections to drive UI completeness indicators.
+required_sections: [roof, exterior, electrical, plumbing, hvac, insulation_ventilation, interior, site_drainage]
 sections:
   - key: structure
     label: Structure

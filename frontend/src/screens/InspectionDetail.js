@@ -23,6 +23,7 @@ export default function InspectionDetail() {
   const [photos, setPhotos] = useState([]);
   const [sectionKey, setSectionKey] = useState('');
   const [sectionOptions, setSectionOptions] = useState([]);
+  const [requiredSections, setRequiredSections] = useState([]);
   const [draft, setDraft] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -35,10 +36,11 @@ export default function InspectionDetail() {
     // Load section options from backend YAML
     (async () => {
       try {
-        const opts = await fetchReportSections();
-        setSectionOptions(opts);
+        const res = await fetchReportSections();
+        setSectionOptions(res.sections || []);
+        setRequiredSections(res.requiredSections || []);
         const last = window.sessionStorage.getItem('hw_last_section_key');
-        if (last && opts.find(o => o.key === last)) {
+        if (last && (res.sections || []).find(o => o.key === last)) {
           setSectionKey(last);
         }
       } catch (e) {
@@ -234,7 +236,7 @@ export default function InspectionDetail() {
   };
 
   // Soft completeness indicator for demo
-  const REQUIRED_SECTIONS = ['roof','exterior','electrical','plumbing','hvac','insulation_ventilation','interior','site_drainage'];
+  const REQUIRED_SECTIONS = requiredSections.length ? requiredSections : ['roof','exterior','electrical','plumbing','hvac','insulation_ventilation','interior','site_drainage'];
   const completedSectionKeys = useMemo(() => {
     const set = new Set();
     clips.forEach(c => { if (c.section && (c.status === 'done' || c.transcript)) set.add(c.section); });
@@ -315,6 +317,22 @@ export default function InspectionDetail() {
                 )}
                 {selectedSection && selectedSection.includes && selectedSection.includes.length > 0 && (
                   <div className="mt-1 text-xs text-gray-500">Includes: {selectedSection.includes.join(', ')}</div>
+                )}
+                {requiredSections.length > 0 && (!isComplete || clips.length < 3) && (
+                  <div className="mt-2 text-xs text-gray-600">
+                    <span className="mr-1">Required:</span>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {requiredSections.map((rk) => {
+                        const present = completedSectionKeys.includes(rk);
+                        return (
+                          <span key={rk} className={`px-2 py-0.5 rounded border ${present ? 'bg-green-50 text-green-700 border-green-200 font-medium' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                            {labelFor(rk)}
+                          </span>
+                        );
+                      })}
+                      <span className={`ml-2 ${isComplete ? 'text-green-700' : 'text-amber-700'}`}>{REQUIRED_SECTIONS.length - missingRequired.length}/{REQUIRED_SECTIONS.length} complete</span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

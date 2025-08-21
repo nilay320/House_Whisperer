@@ -36,6 +36,12 @@ Use this as the single prioritized backlog. When promoting an item, create an is
 - Observability
   - `/api/run/{id}` to fetch trace summary; structured JSON logs
 
+- Access control for inspections (scope to owner)
+  - Add `ownerUid` to `inspections/{id}` and `clips/*` at create time
+  - Frontend Firestore queries: `where('ownerUid','==',auth.currentUser.uid)`
+  - Firestore rules: allow read/write if `request.auth.uid == resource.data.ownerUid`
+  - Optional: admin override for demo users
+
 ---
 Last updated: keep items small, with acceptance criteria. Link issues next to each item when created.
 

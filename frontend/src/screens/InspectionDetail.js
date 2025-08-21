@@ -23,6 +23,9 @@ export default function InspectionDetail() {
   const [photos, setPhotos] = useState([]);
   const [sectionKey, setSectionKey] = useState('');
   const [sectionOptions, setSectionOptions] = useState([]);
+  const [draft, setDraft] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const streamRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -52,6 +55,15 @@ export default function InspectionDetail() {
       snap.forEach((d) => rows.push({ id: d.id, ...d.data() }));
       setClips(rows);
       setInspection({ id });
+    });
+    return () => unsub();
+  }, [id]);
+
+  // Subscribe to report draft
+  useEffect(() => {
+    const dref = doc(db, 'inspections', id, 'reports', 'draft');
+    const unsub = onSnapshot(dref, (snap) => {
+      setDraft(snap.exists() ? ({ id: snap.id, ...snap.data() }) : null);
     });
     return () => unsub();
   }, [id]);
@@ -162,6 +174,79 @@ export default function InspectionDetail() {
     setSizeBytes(null);
   };
 
+  const generateDraft = async () => {
+    try {
+      setGenerating(true);
+      await apiPost('/api/generate_report', { inspectionId: id });
+    } catch (e) {
+      // no-op; surface errors minimally
+      console.error('generate_report failed', e);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const publishDraft = async () => {
+    try {
+      setPublishing(true);
+      await apiPost('/api/publish_report', { inspectionId: id });
+    } catch (e) {
+      console.error('publish_report failed', e);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const downloadMarkdown = () => {
+    if (!draft || !draft.markdown) return;
+    const blob = new Blob([draft.markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inspection_${id}_draft.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const MarkdownPreview = ({ markdown }) => {
+    if (!markdown) return null;
+    const lines = markdown.split('\n');
+    return (
+      <div className="max-h-96 overflow-auto rounded border bg-gray-50 p-3">
+        {lines.map((ln, i) => {
+          const img = ln.match(/^\s*-\s*!\[(.*?)\]\((.*?)\)/);
+          if (img) {
+            const alt = img[1] || '';
+            const url = img[2];
+            return (
+              <div key={i} className="my-2">
+                <img src={url} alt={alt} className="w-full max-w-md max-h-64 object-contain rounded border" />
+                {alt ? <div className="text-xs text-gray-500 mt-1">{alt}</div> : null}
+              </div>
+            );
+          }
+          return <p key={i} className="text-sm whitespace-pre-wrap">{ln}</p>;
+        })}
+      </div>
+    );
+  };
+
+  // Soft completeness indicator for demo
+  const REQUIRED_SECTIONS = ['roof','exterior','electrical','plumbing','hvac','insulation_ventilation','interior','site_drainage'];
+  const completedSectionKeys = useMemo(() => {
+    const set = new Set();
+    clips.forEach(c => { if (c.section && (c.status === 'done' || c.transcript)) set.add(c.section); });
+    return Array.from(set);
+  }, [clips]);
+  const missingRequired = useMemo(() => REQUIRED_SECTIONS.filter(k => !completedSectionKeys.includes(k)), [REQUIRED_SECTIONS, completedSectionKeys]);
+  const labelFor = (key) => (sectionOptions.find(s => s.key === key)?.label || key);
+  const isComplete = missingRequired.length === 0;
+  const badgeClass = isComplete
+    ? 'inline-block px-2 py-1 rounded text-xs bg-green-100 text-green-700 font-medium'
+    : 'inline-block px-2 py-1 rounded text-xs bg-amber-100 text-amber-700 font-medium';
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-5xl mx-auto">
@@ -264,6 +349,37 @@ export default function InspectionDetail() {
               {clips.length === 0 && <p className="text-sm text-gray-500">No clips yet.</p>}
             </div>
           </div>
+        </div>
+
+        {/* Report Draft Panel */}
+        <div className="mt-8 bg-white border rounded-lg p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold">Report Draft</h3>
+            <div className="flex items-center gap-2">
+              <button className={`px-3 py-2 rounded text-white ${generating?'bg-gray-400':'bg-blue-600 hover:bg-blue-700'}`} onClick={generateDraft} disabled={generating}>
+                {generating ? 'Generating…' : 'Generate Draft'}
+              </button>
+              <button className={`px-3 py-2 rounded text-white ${publishing || !draft?'bg-gray-400':'bg-green-600 hover:bg-green-700'}`} onClick={publishDraft} disabled={publishing || !draft}>
+                {publishing ? 'Publishing…' : 'Publish Final Draft'}
+              </button>
+              <button className={`px-3 py-2 rounded ${!draft?'bg-gray-200 text-gray-500':'bg-gray-100 hover:bg-gray-200'}`} onClick={downloadMarkdown} disabled={!draft}>Download .md</button>
+            </div>
+          </div>
+          <div className="text-xs text-gray-700 mb-2 flex items-center gap-2">
+            <span>Required sections completed:</span>
+            <span className={badgeClass}>{REQUIRED_SECTIONS.length - missingRequired.length}/{REQUIRED_SECTIONS.length}</span>
+            {missingRequired.length > 0 && (
+              <>
+                <span className="ml-2 text-amber-700">Missing:</span>
+                <span className="ml-1 text-amber-700">{missingRequired.map(labelFor).join(', ')}</span>
+              </>
+            )}
+          </div>
+          {draft?.markdown ? (
+            <MarkdownPreview markdown={draft.markdown} />
+          ) : (
+            <p className="text-sm text-gray-500">No draft yet. Click "Generate Draft" to build a report from current clips.</p>
+          )}
         </div>
       </div>
     </div>

@@ -1,0 +1,15 @@
+1)
+-----------------
+should an llm decide that based upon semantic similarity? or should it be decided based upon semantic similarity?
+
+Best for quality: use semantic similarity (embeddings) to select top narratives, then optionally LLM re-rank/verify.
+Demo-day pragmatic: embeddings-only is fast, deterministic, and good enough; LLM-only matching adds latency/cost.
+Recommendation:
+Implement a two-stage match in compose_observations:
+1) Embedding similarity per section (e.g., OpenAI text-embedding-3-small) to get top 5.
+2) Optional LLM re-rank/guard (gpt-4o-mini) to pick top 2–3 and ensure fit/tone.
+Keep current keyword fallback if embeddings unavailable; gate with USE_NARRATIVE_SEMANTIC=1.
+
+
+
+

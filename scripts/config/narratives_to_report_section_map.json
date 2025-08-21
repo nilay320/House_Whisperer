@@ -1,0 +1,163 @@
+{
+  "report_section_keys": [
+    "structure",
+    "roof",
+    "exterior",
+    "garage",
+    "interior",
+    "kitchen",
+    "bathrooms",
+    "laundry",
+    "plumbing",
+    "electrical",
+    "hvac",
+    "insulation_ventilation",
+    "fireplaces_chimneys",
+    "site_drainage",
+    "environmental",
+    "pools_spas",
+    "outbuildings",
+    "summary"
+  ],
+  "narrative_section_names": [
+    "Attic",
+    "Electrical",
+    "Environmental Hazards",
+    "Exterior",
+    "Garage",
+    "General Structure",
+    "Green Building",
+    "Homesite",
+    "HVAC",
+    "Inspection Details",
+    "Interior",
+    "Kitchen",
+    "Log Home",
+    "Plumbing",
+    "Pool &amp; Spa",
+    "Roof",
+    "Roof Structure"
+  ],
+  "mapping": {
+    "attic": {
+      "narrative_section_name": "Attic",
+      "report_section_key": "insulation_ventilation",
+      "method": "manual",
+      "similarity": 1.0,
+      "token_overlap": 0.0
+    },
+    "electrical": {
+      "narrative_section_name": "Electrical",
+      "report_section_key": "electrical",
+      "method": "exact_key",
+      "similarity": 1.0,
+      "token_overlap": 1.0
+    },
+    "environmental_hazards": {
+      "narrative_section_name": "Environmental Hazards",
+      "report_section_key": "environmental",
+      "method": "token_key",
+      "similarity": 0.0,
+      "token_overlap": 0.5
+    },
+    "exterior": {
+      "narrative_section_name": "Exterior",
+      "report_section_key": "exterior",
+      "method": "exact_key",
+      "similarity": 1.0,
+      "token_overlap": 1.0
+    },
+    "garage": {
+      "narrative_section_name": "Garage",
+      "report_section_key": "garage",
+      "method": "exact_key",
+      "similarity": 1.0,
+      "token_overlap": 1.0
+    },
+    "general_structure": {
+      "narrative_section_name": "General Structure",
+      "report_section_key": "structure",
+      "method": "token_key",
+      "similarity": 0.0,
+      "token_overlap": 0.5
+    },
+    "green_building": {
+      "narrative_section_name": "Green Building",
+      "report_section_key": "outbuildings",
+      "method": "fuzzy",
+      "similarity": 0.9,
+      "token_overlap": 0.0
+    },
+    "homesite": {
+      "narrative_section_name": "Homesite",
+      "report_section_key": "site_drainage",
+      "method": "manual",
+      "similarity": 1.0,
+      "token_overlap": 0.0
+    },
+    "hvac": {
+      "narrative_section_name": "HVAC",
+      "report_section_key": "hvac",
+      "method": "exact_key",
+      "similarity": 1.0,
+      "token_overlap": 1.0
+    },
+    "inspection_details": {
+      "narrative_section_name": "Inspection Details",
+      "report_section_key": "insulation_ventilation",
+      "method": "fuzzy",
+      "similarity": 0.9,
+      "token_overlap": 0.0
+    },
+    "interior": {
+      "narrative_section_name": "Interior",
+      "report_section_key": "interior",
+      "method": "exact_key",
+      "similarity": 1.0,
+      "token_overlap": 1.0
+    },
+    "kitchen": {
+      "narrative_section_name": "Kitchen",
+      "report_section_key": "kitchen",
+      "method": "exact_key",
+      "similarity": 1.0,
+      "token_overlap": 1.0
+    },
+    "log_home": {
+      "narrative_section_name": "Log Home",
+      "report_section_key": "exterior",
+      "method": "manual",
+      "similarity": 1.0,
+      "token_overlap": 0.0
+    },
+    "plumbing": {
+      "narrative_section_name": "Plumbing",
+      "report_section_key": "plumbing",
+      "method": "exact_key",
+      "similarity": 1.0,
+      "token_overlap": 1.0
+    },
+    "pool_amp_spa": {
+      "narrative_section_name": "Pool &amp; Spa",
+      "report_section_key": "pools_spas",
+      "method": "fuzzy",
+      "similarity": 0.9,
+      "token_overlap": 0.0
+    },
+    "roof": {
+      "narrative_section_name": "Roof",
+      "report_section_key": "roof",
+      "method": "exact_key",
+      "similarity": 1.0,
+      "token_overlap": 1.0
+    },
+    "roof_structure": {
+      "narrative_section_name": "Roof Structure",
+      "report_section_key": "structure",
+      "method": "token_key",
+      "similarity": 0.0,
+      "token_overlap": 0.5
+    }
+  },
+  "instructions": "Review report_section_key values. Replace any 'UNMAPPED' with a valid YAML key from api/report_sections.yaml."
+}

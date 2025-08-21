@@ -877,12 +877,18 @@ def _load_report_sections() -> list:
     try:
       	# Prefer local YAML shipped inside api/ for serverless/monorepo deployments
         base_api = os.path.dirname(__file__)
-        local_yaml = os.path.join(base_api, 'report_sections.yaml')
-        if os.path.exists(local_yaml):
-            yaml_path = local_yaml
+        env_path = os.getenv('REPORT_SECTIONS_PATH')
+        if env_path and os.path.exists(env_path):
+            yaml_path = env_path
         else:
-            base_dir = os.path.dirname(os.path.dirname(__file__))  # api/..
-            yaml_path = os.path.join(base_dir, 'docs', 'plan', 'report-writer', 'report_sections.yaml')
+            preferred_yaml = os.path.join(base_api, 'config', 'report_sections.yaml')
+            legacy_local = os.path.join(base_api, 'report_sections.yaml')
+            if os.path.exists(preferred_yaml):
+                yaml_path = preferred_yaml
+            elif os.path.exists(legacy_local):
+                yaml_path = legacy_local
+            else:
+                raise FileNotFoundError("report_sections.yaml not found; expected at api/config/report_sections.yaml or set REPORT_SECTIONS_PATH")
         with open(yaml_path, 'r') as f:
             data = yaml.safe_load(f) or {}
         sections = data.get('sections') or []
@@ -1064,6 +1070,72 @@ async def delete_clip(clip_id: str):
     if not clip:
         raise HTTPException(status_code=404, detail="clip not found")
     return {"deleted": True, "clip_id": clip_id}
+
+
+# -------- Report generation (Session 10 style LangGraph) --------
+class GenerateReportRequest(BaseModel):
+    inspectionId: str
+    sections: Optional[list[str]] = None
+    save: Optional[bool] = True
+
+
+@app.post("/api/generate_report")
+async def generate_report(req: GenerateReportRequest):
+    if not req.inspectionId:
+        raise HTTPException(status_code=400, detail="inspectionId is required")
+    # Import runner with flexibility for both package and script modes
+    try:
+        from .langgraph_report_writer import run_report  # type: ignore
+    except Exception:
+        try:
+            from api.langgraph_report_writer import run_report  # type: ignore
+        except Exception:
+            try:
+                from langgraph_report_writer import run_report  # type: ignore
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Report graph unavailable: {e}")
+    try:
+        result = run_report(req.inspectionId, req.sections or [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {e}")
+    if not result.get("markdown"):
+        raise HTTPException(status_code=400, detail="No content generated (ensure clips exist and sections match)")
+    return {"ok": True, "saved": bool(result.get("saved")), "report": result}
+
+
+class PublishReportRequest(BaseModel):
+    inspectionId: str
+    title: Optional[str] = None
+
+
+@app.post("/api/publish_report")
+async def publish_report(req: PublishReportRequest):
+    if not req.inspectionId:
+        raise HTTPException(status_code=400, detail="inspectionId is required")
+    if not admin_db:
+        raise HTTPException(status_code=500, detail="Firestore admin not initialized")
+    try:
+        draft_ref = admin_db.collection('inspections').document(req.inspectionId).collection('reports').document('draft')
+        d = draft_ref.get()
+        if not d.exists:
+            raise HTTPException(status_code=400, detail="No draft report found")
+        data = d.to_dict() or {}
+        markdown = data.get('markdown')
+        if not markdown:
+            raise HTTPException(status_code=400, detail="Draft has no markdown")
+        pub_ref = admin_db.collection('inspections').document(req.inspectionId).collection('reports').document()
+        pub_data = {
+            'markdown': markdown,
+            'publishedAt': admin_firestore.SERVER_TIMESTAMP,
+            'title': req.title or 'Published Report',
+            'source': 'draft',
+        }
+        pub_ref.set(pub_data, merge=True)
+        return {"ok": True, "publishedId": pub_ref.id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Publish failed: {e}")
 
 # Entry point for running the application directly
 if __name__ == "__main__":

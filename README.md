@@ -176,7 +176,120 @@ python -c "import os; from qdrant_client import QdrantClient; from qdrant_client
 ```bash
 python scripts/test/test_narratives_search.py --collection narratives_v1 --top-k 5
 ```
-You’ll get PASS/FAIL per test and a summary. This mirrors production: embed transcript → filter by `payload.section == clip.section` → similarity search.
+You'll get PASS/FAIL per test and a summary. This mirrors production: embed transcript → filter by `payload.section == clip.section` → similarity search.
+
+### 5) Step-by-Step App Testing (10 Test Cases)
+To verify narratives are working end-to-end in the actual app, follow these specific test scripts:
+
+#### **Test 1: Electrical - Double-Tapped Breaker**
+1. Create new inspection with address "123 Test St, Charlotte, NC"
+2. Add clip in **Electrical** section
+3. Record audio: *"Two wires are connected to a single breaker, this is a double-tap and needs to be fixed by an electrician"*
+4. Generate Draft → Look for 🟢 **Electrical: Narrative** badge
+5. **Expected Narratives** (should retrieve one of these):
+   - **Row 174 from narratives.csv** - **"Breaker double-tapped"**: *"In the electrical service panel, two wires were connected to a breaker designed for only one wire. This condition, called as a 'double-tap', is contrary to the breaker manufacturer's recommendations, and should be corrected by a qualified electrical contractor."*
+   - **Row 179 from narratives.csv** - **"Breaker: double-tapped"**: *"In this sub-panel, two wires were connected to a breaker designed for only one wire. This is known as a 'double-tap' and it violates the breaker manufacturer's recommendations."*
+6. **Similarity Score**: Should be ≥ 0.7 for keywords "double-tap", "two wires", "breaker"
+
+#### **Test 2: Roof - Missing Shingles**
+1. Add clip in **Roof** section  
+2. Record audio: *"Several asphalt shingles are missing and damaged on the south side of the roof"*
+3. Generate Draft → Look for 🟢 **Roof: Narrative** badge
+4. **Expected Narratives** (should retrieve one of these):
+   - **Row 916 from narratives.csv** - **"Clearance: from grade, damage"**: *"Wood shingles covering exterior walls had damage visible. This condition appeared to be the result of wood decay caused by moisture absorption due to inadequate clearance from grade."*
+   - **Row 935 from narratives.csv** - **"Clearance: from roof, damage"**: *"Damage to wood shingles covering exterior walls appeared to be the result of moisture contact from inadequate clearance from roof components."*
+5. **Similarity Score**: Should be ≥ 0.6 for keywords "shingle", "damage", "missing"
+
+#### **Test 3: HVAC - Disconnected Duct**
+1. Add clip in **HVAC** section
+2. Record audio: *"Found a supply duct that's completely disconnected in the attic, air is leaking everywhere"*
+3. Generate Draft → Look for 🟢 **HVAC: Narrative** badge  
+4. **Expected Narratives** (should retrieve one of these):
+   - **Row 48 from narratives.csv** - **"HVAC ducts: disconnected"**: *"Disconnected ducts were visible in the attic. The ducts should be reconnected by a qualified HVAC contractor to save on energy costs."*
+   - **Row 49 from narratives.csv** - **"HVAC ducts: disconnected combustion vent"**: *"A combustion vent visible in the attic was disconnected, the toxic products of combustion were leaking into the surrounding area."*
+5. **Similarity Score**: Should be ≥ 0.8 for keywords "duct", "disconnected", "attic"
+
+#### **Test 4: Plumbing - Active Leak**
+1. Add clip in **Plumbing** section
+2. Record audio: *"There's an active leak under the kitchen sink at the P-trap connection"*
+3. Generate Draft → Look for 🟢 **Plumbing: Narrative** badge
+4. **Expected Narratives** (should retrieve one of these):
+   - **Row 3296 from narratives.csv** - **"Cabinets: under-sink, trap, leaking"**: *"Leaking connections at the trap assembly beneath the cabinet sink should be repaired to avoid future/additional damage to the cabinet floor and possibly the wall/floor structures below. Repairs should be made as necessary by a qualified contractor."*
+   - **Row 3100 from narratives.csv** - **"Radiant floor: leaking radiant tubing"**: *"Heat distribution pipes for the radiant in-floor heating system were actively leaking. An evaluation and work as necessary should be performed immediately by a qualified plumbing contractor."*
+5. **Similarity Score**: Should be ≥ 0.7 for keywords "leak", "sink", "trap", "P-trap"
+
+#### **Test 5: Insulation - Attic Depth**
+1. Add clip in **Insulation & Ventilation** section
+2. Record audio: *"Attic insulation is only about 4 inches deep, should be much thicker for energy efficiency"*
+3. Generate Draft → Look for 🟢 **Insulation & Ventilation: Narrative** badge
+4. **Expected Narratives** (should retrieve one of these):
+   - **Row 26 from narratives.csv** - **"Depth: 3-4\" - add"**: *"Attic floor insulation depth averages 3 to 4 inches. Install additional insulation to comply with local energy codes."*
+   - **Row 24 from narratives.csv** - **"Depth: 12-14\""**: *"Attic floor insulation depth averages 12 to 14 inches. To maximize savings on heating and cooling costs, insulation levels should be increased."*
+5. **Similarity Score**: Should be ≥ 0.8 for keywords "attic", "insulation", "inches", "depth"
+
+#### **Test 6: Garage - Auto-Reverse Safety**
+1. Add clip in **Garage / Carport** section
+2. Record audio: *"The garage door auto-reverse safety feature isn't working when I test it"*
+3. Generate Draft → Look for 🟢 **Garage / Carport: Narrative** badge
+4. **Expected Narratives** (should retrieve one of these):
+   - **Row 1857 from narratives.csv** - **"Switch: installed too low"**: *"The push-button switch for the overhead garage door automatic opener was lower than the recommended 5-foot (1524 mm) minimum height above the standing surface. This condition is potentially dangerous to children. The switch should be raised for safety reasons."*
+   - **Row 1858 from narratives.csv** - **"Automatic opener: extension cord as permanent wiring"**: *"The overhead garage door automatic opener was plugged into an extension cord. Extension cords should not be used as permanent wiring."*
+5. **Similarity Score**: Should be ≥ 0.6 for keywords "garage", "door", "safety", "auto-reverse"
+
+#### **Test 7: Exterior - Damaged Siding**
+1. Add clip in **Exterior** section
+2. Record audio: *"Found damaged lap siding on the west side with exposed wood substrate underneath"*
+3. Generate Draft → Look for 🟢 **Exterior: Narrative** badge
+4. **Expected Narratives** (should retrieve one of these):
+   - **Row 837 from narratives.csv** - **"Asbestos-containing siding (possible): damaged"**: *"The fiber-cement siding was damaged in areas. Damaged siding should be replaced by a qualified contractor. Matching replacements may be difficult to locate. Because of the age of the home, the fiber-cement siding is likely to contain some percentage of asbestos."*
+   - **Row 836 from narratives.csv** - **"Asbestos-containing siding (possible): broken"**: *"Some pieces of this siding were damaged or missing. Because of the age of the home, the fiber-cement siding is likely to contain asbestos."*
+5. **Similarity Score**: Should be ≥ 0.7 for keywords "siding", "damage", "substrate", "exposed"
+
+#### **Test 8: Interior - Inoperable Window**
+1. Add clip in **Interior** section
+2. Record audio: *"Bedroom window won't open, seems stuck and needs repair for emergency egress"*
+3. Generate Draft → Look for 🟢 **Interior: Narrative** badge
+4. **Expected Narratives** (should retrieve one of these):
+   - **Row 829 from narratives.csv** - **"3-5-year Maintenance recommended"**: *"Manufacturers of vinyl siding typically recommend that window and door openings be re-sealed with a high-quality sealant every 3 to 5 years."*
+   - **Row 969 from narratives.csv** - **"Cracking: above windows/doors"**: *"The brick exterior walls had cracking visible above window and door openings indicating a degree of structural failure."*
+5. **Similarity Score**: Should be ≥ 0.5 for keywords "window", "open", "egress", "inoperable"
+
+#### **Test 9: Site & Drainage - Negative Slope**
+1. Add clip in **Site & Drainage** section
+2. Record audio: *"Ground slopes toward the foundation here, water will drain against the house"*
+3. Generate Draft → Look for 🟢 **Site & Drainage: Narrative** badge
+4. **Expected Narratives** (should retrieve one of these):
+   - **Row 1385 from narratives.csv** - **"Grading: negative grade- expansive soil"**: *"The home had areas of neutral or negative drainage that will route runoff from precipitation toward the foundation. Because the home was in an area that may contain expansive soil, these areas should be re-graded to improve drainage near the foundation and help reduce the risk of foundation damage. The ground should slope away from the home a minimum of ¼-inch per foot for a distance of at least six feet from the foundation."*
+   - **Row 1386 from narratives.csv** - **"Grading: neutral/negative drainage"**: *"The home had areas of neutral or negative drainage that will route runoff from precipitation toward the foundation. Excessive moisture at the foundation can cause damage to the foundation or the home's structure."*
+5. **Similarity Score**: Should be ≥ 0.8 for keywords "slope", "foundation", "drainage", "grading"
+
+#### **Test 10: Kitchen - GFCI Protection**
+1. Add clip in **Kitchen** section
+2. Record audio: *"Kitchen outlets near the sink don't have GFCI protection, this is a safety issue"*
+3. Generate Draft → Look for 🟢 **Kitchen: Narrative** badge
+4. **Expected Narratives** (should retrieve one of these):
+   - **Row 187 from narratives.csv** - **"Breaker: no GFCI protection, install GFCI breakers"**: *"No Ground Fault Circuit Interrupter (GFCI) protection was provided to circuits controlled by this sub-panel. For safety reasons, consider having GFCI breakers installed to meet modern requirements."*
+   - **Row 361 from narratives.csv** - **"GFCI protection, none"**: *"Electrical receptacles in the basement were not ground fault circuit interrupter (GFCI) protected. GFCI protection is designed to prevent electric shock/electrocution and is relatively inexpensive to have installed."*
+5. **Similarity Score**: Should be ≥ 0.6 for keywords "GFCI", "protection", "safety", "outlets"
+
+#### **How to Verify Specific Narratives Were Retrieved:**
+1. **Check Generation Coverage Badges**: Look for 🟢 green "Narrative" badges (not amber "Summary")
+2. **Examine Findings Text**: The "Findings" section should contain the exact narrative text shown above
+3. **Verify Narrative Count**: Badge should show (n=1) or higher, indicating narratives were found
+4. **Match Keywords**: Findings text should include the specific technical terms from the expected narratives
+5. **Cross-Reference CSV**: Use the row numbers (e.g., Row 174, Row 187) to verify against `docs/reference/narratives.csv`
+
+#### **Success Indicators:**
+- ✅ **Green badges** appear in "Generation coverage" 
+- ✅ **"Findings"** sections contain professional narrative text (not just "No standardized narratives found")
+- ✅ **Narrative count** shows (n=1, 2, 3) indicating narratives were retrieved
+- ✅ **Table of Contents** shows sections with narrative content
+- ✅ **Specific narrative text** matches examples shown above
+
+#### **Troubleshooting:**
+- 🟡 **Amber "Summary" badges** = No narratives found, LLM-generated summary used
+- ⚫ **Gray badges** = Low confidence narratives (score < 0.55)
+- ❌ **No findings** = Section missing from report or no clips for that section
 
 ### Production usage
 - Each clip has `clip.section` = report section key (YAML).

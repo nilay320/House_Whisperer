@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    libcairo2 libpango-1.0-0 libgdk-pixbuf2.0-0 libffi8 libxml2 libxslt1.1 fonts-dejavu-core shared-mime-info \
+    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -U pip && pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["bash","-lc","uvicorn app:app --host 0.0.0.0 --port ${PORT}"]

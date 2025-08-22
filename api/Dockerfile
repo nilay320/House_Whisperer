@@ -1,5 +1,6 @@
 FROM python:3.11-slim-bookworm
 
+# WeasyPrint native deps (Cairo/Pango/Harfbuzz/Fribidi/GDK-Pixbuf/GLib) + fonts
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libcairo2 \
     libpango-1.0-0 \
@@ -8,7 +9,6 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libharfbuzz0b \
     libfribidi0 \
     libgdk-pixbuf-2.0-0 \
-    libgobject-2.0-0 \
     libglib2.0-0 \
     libffi8 \
     libxml2 \
@@ -22,7 +22,11 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -U pip && pip install --no-cache-dir -r requirements.txt
+
 COPY . .
+
+# Start server (use sh because slim images may not have bash)
 CMD ["sh","-lc","python -m uvicorn app:app --host 0.0.0.0 --port ${PORT} --log-level debug --access-log"]

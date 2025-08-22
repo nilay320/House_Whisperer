@@ -9,5 +9,18 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libxml2 \
     libxslt1.1 \
     fonts-dejavu-core \
+    fonts-noto-core \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
     shared-mime-info \
  && rm -rf /var/lib/apt/lists/*
+
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -U pip && pip install --no-cache-dir -r requirements.txt
+COPY . .
+
+# Use sh so $PORT expands, and crank up logging
+CMD ["sh", "-lc", "uvicorn app:app --host 0.0.0.0 --port ${PORT} --log-level debug --access-log"]

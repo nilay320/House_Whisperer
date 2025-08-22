@@ -157,6 +157,10 @@ class Clip(BaseModel):
     error: Optional[str] = None
 
 
+class GeneratePDFRequest(BaseModel):
+    inspectionId: str
+
+
 _INSPECTIONS: dict[str, Inspection] = {}
 _CLIPS: dict[str, Clip] = {}
 
@@ -1214,8 +1218,6 @@ async def debug_inspection(inspection_id: str):
 @app.post("/api/generate_pdf")
 async def generate_pdf(req: GeneratePDFRequest):
     """Generate a PDF from the draft report markdown"""
-    if not _PDF_AVAILABLE:
-        raise HTTPException(status_code=503, detail="PDF generation not available on this deployment")
     if not req.inspectionId:
         raise HTTPException(status_code=400, detail="inspectionId is required")
     if not admin_db:

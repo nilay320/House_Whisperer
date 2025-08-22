@@ -157,10 +157,6 @@ class Clip(BaseModel):
     error: Optional[str] = None
 
 
-class GeneratePDFRequest(BaseModel):
-    inspectionId: str
-
-
 _INSPECTIONS: dict[str, Inspection] = {}
 _CLIPS: dict[str, Clip] = {}
 
@@ -1213,6 +1209,10 @@ async def debug_inspection(inspection_id: str):
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+class GeneratePDFRequest(BaseModel):
+    inspectionId: str
 
 
 @app.post("/api/generate_pdf")

@@ -18,6 +18,14 @@ export const apiPost = async (path, body) => {
   return res.json();
 };
 
+export const apiDelete = async (path) => {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`);
+  return res.json();
+};
+
 export const fetchReportSections = async () => {
   const data = await apiGet('/api/report_sections');
   const sections = (data.sections || []).map(s => ({ key: s.key, label: s.label, includes: s.includes || [] }));

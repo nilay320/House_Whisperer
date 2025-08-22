@@ -32,6 +32,9 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=False)
 # Standard imports for PDF processing and text handling
 import PyPDF2
 from io import BytesIO
+import markdown
+import weasyprint
+from datetime import datetime
 
 # Import our LangGraph RAG system - delay import to avoid initialization issues
 LANGGRAPH_AVAILABLE = True
@@ -127,11 +130,13 @@ _ADMIN_WARN_SHOWN = False
 # -------------------------
 class CreateInspectionRequest(BaseModel):
     name: Optional[str] = None
+    address: Optional[str] = None
 
 
 class Inspection(BaseModel):
     id: str
     name: Optional[str] = None
+    address: Optional[str] = None
 
 
 class CreateClipRequest(BaseModel):
@@ -924,13 +929,14 @@ async def get_report_sections():
 @app.post("/api/inspections")
 async def create_inspection(req: CreateInspectionRequest):
     insp_id = str(uuid4())
-    insp = Inspection(id=insp_id, name=req.name)
+    insp = Inspection(id=insp_id, name=req.name, address=req.address)
     _INSPECTIONS[insp_id] = insp
     # Persist to Firestore if available so IDs survive restarts
     try:
         if admin_db:
             admin_db.collection("inspections").document(insp_id).set({
                 "name": req.name,
+                "address": req.address,
                 "status": "in_progress",
                 "createdAt": admin_firestore.SERVER_TIMESTAMP,
             }, merge=True)
@@ -975,6 +981,7 @@ async def list_inspections():
                 items.append({
                     "id": d.id,
                     "name": data.get("name"),
+                    "address": data.get("address"),
                     "status": status,
                     "counts": counts,
                 })
@@ -1113,6 +1120,9 @@ class PublishReportRequest(BaseModel):
     inspectionId: str
     title: Optional[str] = None
 
+class GeneratePDFRequest(BaseModel):
+    inspectionId: str
+
 
 @app.post("/api/publish_report")
 async def publish_report(req: PublishReportRequest):
@@ -1142,6 +1152,227 @@ async def publish_report(req: PublishReportRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Publish failed: {e}")
+
+
+@app.delete("/api/inspections/{inspection_id}")
+async def delete_inspection(inspection_id: str):
+    """Delete an entire inspection and all its clips/reports"""
+    if not admin_db:
+        raise HTTPException(status_code=500, detail="Firestore admin not initialized")
+    
+    try:
+        # Delete all clips in the inspection
+        clips_ref = admin_db.collection('inspections').document(inspection_id).collection('clips')
+        clips = list(clips_ref.stream())
+        for clip_doc in clips:
+            clip_doc.reference.delete()
+        
+        # Delete all reports in the inspection  
+        reports_ref = admin_db.collection('inspections').document(inspection_id).collection('reports')
+        reports = list(reports_ref.stream())
+        for report_doc in reports:
+            report_doc.reference.delete()
+            
+        # Delete the inspection document itself
+        admin_db.collection('inspections').document(inspection_id).delete()
+        
+        # Also remove from in-memory storage if present
+        if inspection_id in _INSPECTIONS:
+            del _INSPECTIONS[inspection_id]
+            
+        return {"ok": True, "deleted": inspection_id}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete inspection: {e}")
+
+
+@app.get("/api/debug_inspection/{inspection_id}")
+async def debug_inspection(inspection_id: str):
+    """Debug endpoint to check inspection data"""
+    if not admin_db:
+        return {"error": "Firestore not initialized"}
+    
+    try:
+        # Get inspection metadata
+        insp_doc = admin_db.collection('inspections').document(inspection_id).get()
+        inspection_data = insp_doc.to_dict() if insp_doc.exists else {}
+        
+        # Get clips count
+        clips = list(admin_db.collection('inspections').document(inspection_id).collection('clips').stream())
+        clips_data = [{'id': c.id, 'data': c.to_dict()} for c in clips[:3]]  # First 3 clips
+        
+        return {
+            "inspection_exists": insp_doc.exists,
+            "inspection_data": inspection_data,
+            "clips_count": len(clips),
+            "sample_clips": clips_data
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/generate_pdf")
+async def generate_pdf(req: GeneratePDFRequest):
+    """Generate a PDF from the draft report markdown"""
+    if not req.inspectionId:
+        raise HTTPException(status_code=400, detail="inspectionId is required")
+    if not admin_db:
+        raise HTTPException(status_code=500, detail="Firestore admin not initialized")
+    
+    try:
+        # Get the draft report
+        draft_ref = admin_db.collection('inspections').document(req.inspectionId).collection('reports').document('draft')
+        d = draft_ref.get()
+        if not d.exists:
+            raise HTTPException(status_code=400, detail="No draft report found")
+        
+        data = d.to_dict() or {}
+        markdown_content = data.get('markdown')
+        if not markdown_content:
+            raise HTTPException(status_code=400, detail="Draft has no markdown content")
+        
+        # Convert markdown to HTML
+        html_content = markdown.markdown(markdown_content, extensions=['tables', 'fenced_code'])
+        
+        # Create a complete HTML document with CSS styling
+        html_document = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Home Inspection Report</title>
+            <style>
+                @page {{
+                    size: A4;
+                    margin: 0.75in;
+                }}
+                body {{
+                    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    font-size: 11pt;
+                }}
+                h1 {{
+                    color: #1f2937;
+                    font-size: 24pt;
+                    margin-bottom: 0.5em;
+                    border-bottom: 2px solid #3b82f6;
+                    padding-bottom: 0.2em;
+                }}
+                h2 {{
+                    color: #374151;
+                    font-size: 16pt;
+                    margin-top: 1.5em;
+                    margin-bottom: 0.5em;
+                    border-bottom: 1px solid #d1d5db;
+                    padding-bottom: 0.1em;
+                }}
+                h3 {{
+                    color: #4b5563;
+                    font-size: 13pt;
+                    margin-top: 1em;
+                    margin-bottom: 0.3em;
+                }}
+                p {{
+                    margin-bottom: 0.8em;
+                }}
+                ul, ol {{
+                    margin-bottom: 0.8em;
+                    padding-left: 1.2em;
+                }}
+                li {{
+                    margin-bottom: 0.3em;
+                }}
+                strong {{
+                    color: #1f2937;
+                }}
+                img {{
+                    max-width: 100%;
+                    height: auto;
+                    display: block;
+                    margin: 1em 0;
+                    page-break-inside: avoid;
+                }}
+                figure {{
+                    margin: 1em 0;
+                    page-break-inside: avoid;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 1em 0;
+                    page-break-inside: avoid;
+                }}
+                th, td {{
+                    border: 1px solid #d1d5db;
+                    padding: 8px;
+                    text-align: left;
+                }}
+                th {{
+                    background-color: #f3f4f6;
+                    font-weight: 600;
+                }}
+                .report-header {{
+                    text-align: center;
+                    margin-bottom: 2em;
+                    border-bottom: 3px solid #3b82f6;
+                    padding-bottom: 1em;
+                }}
+                .inspection-details {{
+                    background-color: #f9fafb;
+                    padding: 1em;
+                    border-radius: 4px;
+                    margin-bottom: 1.5em;
+                }}
+                
+                /* Page break handling */
+                h2 {{
+                    page-break-after: avoid;
+                }}
+                h3 {{
+                    page-break-after: avoid;
+                }}
+                
+                /* Ensure content doesn't break awkwardly */
+                p, li {{
+                    orphans: 2;
+                    widows: 2;
+                }}
+                
+                /* Image sizing for different screen sizes */
+                @media print {{
+                    img {{
+                        max-height: 6in;
+                        object-fit: contain;
+                    }}
+                }}
+            </style>
+        </head>
+        <body>
+            {html_content}
+        </body>
+        </html>
+        """
+        
+        # Generate PDF using WeasyPrint
+        pdf_bytes = weasyprint.HTML(string=html_document).write_pdf()
+        
+        # Create filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"inspection_report_{req.inspectionId[:8]}_{timestamp}.pdf"
+        
+        # Return PDF as response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
 
 # Entry point for running the application directly
 if __name__ == "__main__":

@@ -35,6 +35,7 @@ class ReportState(TypedDict, total=False):
     sections_filter: Optional[List[str]]
     # Loaded data
     clips: List[Dict]
+    inspection_meta: Dict
     sections_catalog: List[Dict]
     narratives_by_section: Dict[str, List[Dict]]
     # Grouped
@@ -50,11 +51,12 @@ class ReportState(TypedDict, total=False):
 @traceable(name="load_data")
 def node_load_data(state: ReportState) -> ReportState:
     inspection_id = state["inspection_id"]
-    clips, _ = _collect_inspection_data(inspection_id)
+    clips, _, inspection_meta = _collect_inspection_data(inspection_id)
     sections_catalog = _load_report_sections()
     narratives_by_section = {}  # minimal v1: omit narratives inside writer
     state.update({
         "clips": clips,
+        "inspection_meta": inspection_meta,
         "sections_catalog": sections_catalog,
         "narratives_by_section": narratives_by_section,
     })
@@ -157,7 +159,8 @@ def node_assemble_markdown(state: ReportState) -> ReportState:
     grouped = state.get("grouped", {})
     sections_catalog = state.get("sections_catalog", [])
     narratives_by_section = state.get("narratives_by_section", {})
-    markdown, section_count, clip_count, section_metadata = _render_markdown(inspection_id, grouped, sections_catalog, narratives_by_section)
+    inspection_meta = state.get("inspection_meta", {})
+    markdown, section_count, clip_count, section_metadata = _render_markdown(inspection_id, grouped, sections_catalog, narratives_by_section, inspection_meta)
     state.update({
         "markdown": markdown,
         "section_count": section_count,
@@ -254,12 +257,19 @@ def _load_report_sections() -> List[Dict]:
         return []
 
 
-def _collect_inspection_data(inspection_id: str) -> (List[Dict], int):
+def _collect_inspection_data(inspection_id: str) -> (List[Dict], int, Dict):
     app_mod = _get_app_mod()
     items: List[Dict] = []
     total = 0
+    inspection_meta = {}
     if getattr(app_mod, 'admin_db', None):
         try:
+            # Fetch inspection metadata
+            insp_doc = app_mod.admin_db.collection('inspections').document(inspection_id).get()
+            if insp_doc.exists:
+                inspection_meta = insp_doc.to_dict() or {}
+            
+            # Fetch clips
             clip_docs = list(app_mod.admin_db.collection('inspections').document(inspection_id).collection('clips').stream())
             for cd in clip_docs:
                 data = cd.to_dict() or {}
@@ -273,14 +283,14 @@ def _collect_inspection_data(inspection_id: str) -> (List[Dict], int):
                     'photos': data.get('photos') or [],
                     'status': data.get('status') or '',
                 })
-            return items, total
+            return items, total, inspection_meta
         except Exception:
             pass
     # Fallback empty
-    return items, total
+    return items, total, inspection_meta
 
 
-def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], sections_catalog: List[Dict], narratives_by_section: Dict) -> (str, int, int, Dict[str, Dict]):
+def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], sections_catalog: List[Dict], narratives_by_section: Dict, inspection_meta: Dict = None) -> (str, int, int, Dict[str, Dict]):
     def _label_for(key: str) -> str:
         for s in sections_catalog:
             if s.get('key') == key:
@@ -292,9 +302,20 @@ def _render_markdown(inspection_id: str, grouped: Dict[str, List[Dict]], section
     clip_count = sum(len(v) for v in grouped.values())
     lines: List[str] = []
     section_meta: Dict[str, Dict] = {}
-    lines.append(f"# Home Inspection Draft Report\n")
-    lines.append(f"Generated: {now}\n")
-    lines.append(f"Inspection ID: {inspection_id}\n")
+    
+    # Header with address if available
+    inspection_meta = inspection_meta or {}
+    address = inspection_meta.get('address', '').strip()
+    if address:
+        lines.append(f"# Home Inspection Draft Report")
+        lines.append(f"**Property Address:** {address}")
+        lines.append("")
+        lines.append(f"**Generated:** {now}")
+        lines.append(f"**Inspection ID:** {inspection_id}")
+    else:
+        lines.append(f"# Home Inspection Draft Report")
+        lines.append(f"**Generated:** {now}")
+        lines.append(f"**Inspection ID:** {inspection_id}")
     lines.append("")
 
     client = None

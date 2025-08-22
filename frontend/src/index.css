@@ -147,6 +147,28 @@ code {
   border-color: rgba(255, 165, 0, .4) !important;
 }
 
+/* Inspections table hover styling for cyber theme */
+[data-theme='cyber'] tr.hover\:bg-gradient-to-r:hover {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1)) !important;
+}
+
+[data-theme='cyber'] tr:hover td {
+  color: var(--cy-text) !important;
+}
+
+/* Delete button styling for cyber theme */
+[data-theme='cyber'] .text-red-600 {
+  color: #ef4444 !important;
+}
+
+[data-theme='cyber'] .hover\:text-red-800:hover {
+  color: #dc2626 !important;
+}
+
+[data-theme='cyber'] .hover\:bg-red-50:hover {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
 [data-theme='cyber'] .bg-green-600 {
   background-color: #059669 !important;
 }

@@ -52,6 +52,20 @@ export default function InspectionDetail() {
     })();
   }, []);
 
+  // Subscribe to inspection document
+  useEffect(() => {
+    const inspRef = doc(db, 'inspections', id);
+    const unsub = onSnapshot(inspRef, (snap) => {
+      if (snap.exists()) {
+        setInspection({ id: snap.id, ...snap.data() });
+      } else {
+        setInspection({ id });
+      }
+    });
+    return () => unsub();
+  }, [id]);
+
+  // Subscribe to clips
   useEffect(() => {
     const clipsRef = collection(db, 'inspections', id, 'clips');
     const q = query(clipsRef, orderBy('createdAt', 'asc'));
@@ -59,7 +73,6 @@ export default function InspectionDetail() {
       const rows = [];
       snap.forEach((d) => rows.push({ id: d.id, ...d.data() }));
       setClips(rows);
-      setInspection({ id });
     });
     return () => unsub();
   }, [id]);
@@ -202,17 +215,36 @@ export default function InspectionDetail() {
     }
   };
 
-  const downloadMarkdown = () => {
+  const downloadPDF = async () => {
     if (!draft || !draft.markdown) return;
-    const blob = new Blob([draft.markdown], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `inspection_${id}_draft.md`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || '';
+      const response = await fetch(`${apiUrl}/api/generate_pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ inspectionId: id }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      // Handle the PDF blob response
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `inspection_report_${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      alert('Failed to generate PDF. Please try again.');
+    }
   };
 
   const MarkdownPreview = ({ markdown }) => {
@@ -321,7 +353,18 @@ export default function InspectionDetail() {
           </Link>
         </div>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">Inspection #{id}</h2>
+          <div>
+            <h2 className="text-2xl font-bold">
+              {inspection?.address ? (
+                <span>Inspection: {inspection.address}</span>
+              ) : (
+                <span>Inspection #{id}</span>
+              )}
+            </h2>
+            {inspection?.address && (
+              <p className="text-sm text-gray-500 font-mono mt-1">ID: {id.slice(0, 8)}...</p>
+            )}
+          </div>
           <span className="text-sm text-gray-500">Clips: {clips.length}</span>
         </div>
 
@@ -498,7 +541,7 @@ export default function InspectionDetail() {
               <button className={`px-3 py-2 rounded text-white ${publishing || !draft?'bg-gray-400':'bg-green-600 hover:bg-green-700'}`} onClick={publishDraft} disabled={publishing || !draft}>
                 {publishing ? 'Publishing…' : 'Publish Final Draft'}
               </button>
-              <button className={`px-3 py-2 rounded text-white ${!draft?'bg-gray-400':'bg-blue-600 hover:bg-blue-700'} transition-colors`} onClick={downloadMarkdown} disabled={!draft}>Download .md</button>
+              <button className={`px-3 py-2 rounded text-white ${!draft?'bg-gray-400':'bg-blue-600 hover:bg-blue-700'} transition-colors`} onClick={downloadPDF} disabled={!draft}>Download PDF</button>
             </div>
           </div>
           <div className="text-xs text-gray-700 mb-2 flex items-center gap-2">

@@ -55,6 +55,16 @@ class ReportState(TypedDict, total=False):
     report_quality_score: float
 
 
+def get_report_version():
+    """Single source of truth for report version based on Cohere availability
+    
+    Returns:
+        str: "2.1_reranker" if Cohere API key is set, "2.0_enhanced" otherwise
+    """
+    has_cohere = bool(os.getenv('COHERE_API_KEY', '').strip())
+    return "2.1_reranker" if has_cohere else "2.0_enhanced"
+
+
 @traceable(name="load_data")
 def node_load_data(state: ReportState) -> ReportState:
     inspection_id = state["inspection_id"]
@@ -745,9 +755,9 @@ def _render_enhanced_markdown(
     lines.append(f"- **Quality Score:** {report_quality:.0%}")
     lines.append(f"- **Sections:** {section_count}")
     lines.append(f"- **Observations:** {clip_count}")
-    # Determine version based on Cohere availability
-    has_cohere = bool(os.getenv('COHERE_API_KEY', '').strip())
-    version_display = "2.1 Reranker" if has_cohere else "2.0 Enhanced"
+    # Use shared version function and format for display
+    version = get_report_version()
+    version_display = version.replace('_reranker', ' Reranker').replace('_enhanced', ' Enhanced').replace('2.0', '2.0').replace('2.1', '2.1')
     lines.append(f"- **Report Version:** {version_display}")
     lines.append("")
     
@@ -783,7 +793,7 @@ def node_save_draft(state: ReportState) -> ReportState:
                 'executiveSummary': state.get('executive_summary', ''),
                 'reportQualityScore': state.get('report_quality_score', 0.5),
                 'narrativeSources': state.get('narrative_sources', {}),
-                'version': '2.0_enhanced'
+                'version': get_report_version()
             }, merge=True)
             saved = True
             
@@ -834,7 +844,7 @@ def run_enhanced_report(inspection_id: str, sections: Optional[List[str]] = None
         "executiveSummary": out.get("executive_summary", ""),
         "reportQualityScore": out.get("report_quality_score", 0.5),
         "narrativeSources": out.get("narrative_sources", {}),
-        "version": "2.0_enhanced"
+        "version": get_report_version()
     }
 
 

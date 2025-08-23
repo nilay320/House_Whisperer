@@ -25,7 +25,8 @@ try:
         node_assemble_enhanced_markdown,
         node_save_draft,
         _load_report_sections,
-        _collect_inspection_data
+        _collect_inspection_data,
+        get_report_version
     )
 except ImportError:
     from langgraph_report_writer_enhanced import (
@@ -43,7 +44,8 @@ except ImportError:
         node_assemble_enhanced_markdown,
         node_save_draft,
         _load_report_sections,
-        _collect_inspection_data
+        _collect_inspection_data,
+        get_report_version
     )
 
 # Import the fixed render function
@@ -409,10 +411,6 @@ def run_enhanced_report_with_reranker(inspection_id: str, sections: Optional[Lis
     initial: ReportState = {"inspection_id": inspection_id, "sections_filter": sections or []}
     out: ReportState = graph.invoke(initial)  # type: ignore
     
-    # Determine version based on Cohere availability
-    has_cohere = bool(os.getenv('COHERE_API_KEY', '').strip())
-    version = "2.1_reranker" if has_cohere else "2.0_enhanced"
-    
     return {
         "markdown": out.get("markdown", ""),
         "sectionCount": out.get("section_count", 0),
@@ -421,5 +419,5 @@ def run_enhanced_report_with_reranker(inspection_id: str, sections: Optional[Lis
         "executiveSummary": out.get("executive_summary", ""),
         "reportQualityScore": out.get("report_quality_score", 0.5),
         "narrativeSources": out.get("narrative_sources", {}),
-        "version": version
+        "version": get_report_version()
     }

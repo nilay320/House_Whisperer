@@ -7,9 +7,9 @@ The report generation system uses LangGraph to orchestrate a multi-node workflow
 
 ```mermaid
 graph TD
-    Start([Start]) --> LoadData[Load Data<br/>node_load_data]
-    LoadData --> GroupBySection[Group by Section<br/>node_group_by_section]
-    GroupBySection --> RetrieveNarratives{Retrieve Narratives<br/>node_retrieve_narratives_with_reranker}
+    Start([Start]) --> LoadData[Load Data<br/>load_data]
+    LoadData --> GroupBySection[Group by Section<br/>group_by_section]
+    GroupBySection --> RetrieveNarratives{Retrieve Narratives<br/>retrieve_narratives_with_reranker}
     
     %% Narrative Retrieval Sub-flow
     RetrieveNarratives --> QdrantSearch[Search Qdrant<br/>Vector Database<br/>6,576 narratives]
@@ -26,13 +26,13 @@ graph TD
     
     InspectorRAG --> RAGCheck{Confidence > 0.6?}
     
-    RAGCheck -->|Yes| HybridNarrative[🎯📋 Narrative + Code<br/>Combined Result]
-    RAGCheck -->|No| GPTGenerate[GPT-4 Generation<br/>_generate_custom_narrative]
+    RAGCheck -->|Yes| HybridNarrative[🎯📋 Narratives + Standards<br/>Combined Result]
+    RAGCheck -->|No| GPTGenerate[GPT-4o-mini Generation<br/>_generate_custom_narrative]
     
-    GPTGenerate --> AIWithNarrative[🤖 AI + Database<br/>Combined]
+    GPTGenerate --> AIWithNarrative[🤖 AI + Narratives<br/>Combined]
     
     %% No narratives path
-    QdrantSearch -->|No Matches| DirectRAG[Try RAG First]
+    QdrantSearch -->|No Matches| DirectRAG[Try Standards RAG]
     DirectRAG --> InspectorRAG
     
     %% Convergence
@@ -40,9 +40,9 @@ graph TD
     HybridNarrative --> CombineResults
     AIWithNarrative --> CombineResults
     
-    CombineResults --> AssembleMarkdown[Assemble Markdown<br/>node_assemble_enhanced_markdown]
+    CombineResults --> AssembleMarkdown[Assemble Markdown<br/>assemble_enhanced_markdown]
     
-    AssembleMarkdown --> SaveDraft[Save Draft<br/>node_save_draft]
+    AssembleMarkdown --> SaveDraft[Save Draft<br/>save_draft]
     SaveDraft --> End([End])
     
     %% Style
@@ -59,17 +59,22 @@ graph TD
 
 ## Node Descriptions
 
-### 1. **Load Data** (`node_load_data`)
+### 1. **Load Data** (`load_data`)
 - **Input**: `inspection_id`, `sections_filter`
-- **Process**: Fetches clips from Firestore
-- **Output**: `clips`, `inspection_meta`
+- **Loads**:
+  - `clips` from Firestore `inspections/{inspection_id}/clips`
+    - Fields: `id`, `section`, `transcript`, `photos`, `status`
+  - `inspection_meta` from Firestore `inspections/{inspection_id}`
+  - `sections_catalog` from `api/config/report_sections.yaml` (fields: `key`, `label`, `includes`)
+- **Initializes (empty)**: `narratives_by_section`, `narrative_sources`, `section_severity`, `quality_scores`, `rag_results`
+- **Output**: `clips`, `inspection_meta`, `sections_catalog`
 
-### 2. **Group by Section** (`node_group_by_section`)
+### 2. **Group by Section** (`group_by_section`)
 - **Input**: `clips`
 - **Process**: Groups clips by their section (e.g., electrical, plumbing)
 - **Output**: `grouped` (Dict[section_key, List[clips]])
 
-### 3. **Retrieve Narratives** (`node_retrieve_narratives_with_reranker`)
+### 3. **Retrieve Narratives** (`retrieve_narratives_with_reranker`)
 The core intelligence node with cascading fallbacks:
 
 #### 3a. **Qdrant Search**
@@ -77,86 +82,98 @@ The core intelligence node with cascading fallbacks:
 - Uses OpenAI embeddings (text-embedding-3-small)
 - Filters by section for relevance
 
-#### 3b. **Score Evaluation & Code Compliance Check**
-**First, check for code-related keywords**: 'code', 'violation', 'standard', 'requirement', 'compliance', 'safety'
+#### 3b. **Score Evaluation & Standards Compliance Check**
+**First, check for standards-related keywords**: 'code', 'violation', 'standard', 'requirement', 'compliance', 'safety'
 
 **Decision Logic:**
-- **High confidence AND no code keywords**:
-  - Reranked with score ≥ 0.6 → 🎯 Reranked Narrative
-  - Non-reranked with score ≥ 0.7 → ✅ Verified Narrative
+- **High confidence AND no standards keywords**:
+  - Reranked with score ≥ 0.6 → 🎯 Reranked Narratives
+  - Non-reranked with score ≥ 0.7 → ✅ Verified Narratives
   
-- **Low confidence OR code keywords mentioned**:
-  - Trigger RAG enhancement
-  - **Result**: 📋 Building Code-Enhanced + original narratives
-  - Combines RAG result with top 2 database narratives
+- **Low confidence OR standards keywords mentioned**:
+  - Trigger Standards RAG enhancement
+  - **Result**: 📋 Standards-Based or 🎯📋 Narratives+Standards
+  - Combines expert narratives with building standards
 
 #### 3c. **Inspector RAG** (Enhancement/Fallback)
 - Triggered when:
   - Low confidence narratives (< thresholds)
   - Code compliance keywords detected
   - No narratives found at all
-- Searches 16,632 chunks of NC Building Codes & SOPs
+- Searches ≈16.6k chunks of NC Building Codes & SOPs
 - Uses `inspector-standards-postmidterm` collection
 - If confidence > 0.6: Adds code-compliant narrative to existing ones
 
-#### 3d. **GPT-4 Generation** (Last Resort)
+#### 3d. **GPT-4o-mini Generation** (Last Resort)
 - Only when RAG confidence ≤ 0.6 or RAG fails
 - Generates custom narrative
 - Still combined with database narratives if available
 - Result: 🤖 AI Generated + database narratives
 
-### 4. **Assemble Markdown** (`node_assemble_enhanced_markdown`)
+### 4. **Assemble Markdown** (`assemble_enhanced_markdown`)
 - Combines all narratives into professional report format
 - Includes executive summary, quality metrics
 - Generates severity badges and source attribution
 
-### 5. **Save Draft** (`node_save_draft`)
+### 5. **Save Draft** (`save_draft`)
 - Persists to Firestore (`reports/draft`)
 - Returns final markdown and metadata
 
 ## Decision Flow Summary
 
 ### When Each Source is Used:
-1. **✅/🎯 Database Only**: 
+1. **✅/🎯 Narratives Only**: 
    - High confidence (≥0.7 or reranked ≥0.6) 
    - AND no code compliance keywords
 
-2. **🎯📋 Narrative + Building Code (Hybrid)**:
-   - Database narratives exist AND:
+2. **🎯📋 Narratives + Standards (Hybrid)**:
+   - Narratives exist AND:
      - Low confidence (<thresholds) OR
      - Code keywords detected ('code', 'violation', 'standard', 'safety', etc.)
    - RAG confidence > 0.6
-   - Combines both database narratives and RAG results
+   - Combines both expert narratives and building standards
 
-3. **📋 Building Code Only**:
-   - NO database narratives found
+3. **📋 Standards-Based Only**:
+   - NO narratives found in database
    - RAG confidence > 0.6
+   - Uses building codes & regulations
 
-4. **🤖 AI Generated + Database**:
+4. **🤖 AI Generated**:
    - RAG confidence ≤ 0.6 or RAG admits no relevant info
-   - Still combines with database narratives if available
+   - Still combines with narratives if available
 
 ### Important Notes:
 - **Code keywords trigger RAG**: Even high-quality narratives get RAG enhancement if code compliance mentioned
 - **Narratives are preserved**: Database narratives are combined with RAG/AI, not replaced
 - **Smart confidence detection**: RAG responses saying "couldn't find relevant" get low confidence
+ - **Version tags**: API responses may show `2.1_reranker` while Firestore draft metadata stores `2.0_enhanced`; both denote the reranker pipeline.
 
 ## State Management
 
 The system uses `ReportState` (TypedDict) to maintain state across nodes:
 
 ```python
-class ReportState(TypedDict):
+class ReportState(TypedDict, total=False):
     inspection_id: str
     sections_filter: Optional[List[str]]
+    # Loaded data
     clips: List[Dict]
-    grouped: Dict[str, List[Dict]]
+    inspection_meta: Dict
+    sections_catalog: List[Dict]
     narratives_by_section: Dict[str, List[Dict]]
-    narrative_sources: Dict[str, str]  # 'verified_narrative', 'reranked_narrative', 'hybrid_code_narrative', 'building_code_enhanced', 'ai_generated'
-    section_severity: Dict[str, str]   # 'critical', 'major', 'minor', 'info'
+    # Enhanced tracking
+    narrative_sources: Dict[str, str]
+    section_severity: Dict[str, str]
     quality_scores: Dict[str, float]
     rag_results: Dict[str, Dict]
+    # Grouped
+    grouped: Dict[str, List[Dict]]
+    # Output
     markdown: str
+    section_count: int
+    clip_count: int
+    saved: bool
+    section_metadata: Dict[str, Dict]
     executive_summary: str
     report_quality_score: float
 ```
@@ -166,24 +183,27 @@ class ReportState(TypedDict):
 - **LangGraph**: Orchestration framework for multi-node workflows
 - **Qdrant**: Vector database for narrative storage (1536-dim embeddings)
 - **Cohere**: Reranking API for improved semantic matching
-- **OpenAI**: Embeddings (text-embedding-3-small) and generation (GPT-4)
+- **OpenAI**: Embeddings (text-embedding-3-small) and generation (gpt-4o-mini)
 - **Firestore**: Persistence layer for inspection data and reports
 
 ## Configuration
 
 Environment variables control behavior:
-- `USE_ENHANCED_REPORT=1`: Enable enhanced report writer
+- `USE_ENHANCED_REPORT`: Not used (API always uses enhanced reranker graph)
 - `COHERE_API_KEY`: Enable reranking (auto-detected)
 - `REPORT_LOGS=1`: Enable debug logging to see cascade
 - `QDRANT_COLLECTION`: Default `narratives_v1`
 - `EMBEDDING_MODEL_NAME`: Default `text-embedding-3-small`
+
+Endpoint behavior:
+- `/api/generate_report` uses the reranker graph by default; reranking activates when `COHERE_API_KEY` is set.
 
 ## Performance Characteristics
 
 - **Narrative Retrieval**: ~200-500ms per section
 - **Cohere Reranking**: +100-200ms when enabled
 - **Inspector RAG**: ~2-5s when triggered
-- **GPT-4 Generation**: ~3-5s when needed
+- **GPT-4o-mini Generation**: ~3-5s when needed
 - **Total Report Generation**: 10-30s depending on sections and fallbacks
 
 ## Quality Assurance

@@ -12,7 +12,7 @@ Home inspectors spend hours manually writing reports, searching for appropriate 
 
 An AI-powered platform that transforms audio/visual inspection notes into professional reports by:
 - **Smart Narrative Matching**: 6,500+ pre-written expert narratives with semantic search & reranking
-- **Code Compliance**: Automatic cross-reference with NC Building Codes & inspection standards
+- **Standards Compliance**: Automatic cross-reference with building codes & inspection standards
 - **Intelligent Fallbacks**: RAG-based code lookups and AI generation when needed
 - **Voice-First Interface**: Record observations in real-time during inspection
 
@@ -33,7 +33,7 @@ An AI-powered platform that transforms audio/visual inspection notes into profes
 ### Tech Stack
 - **Frontend**: React + Tailwind CSS + Firebase (Vercel)
 - **Backend**: FastAPI + Python (Railway)
-- **Vector DB**: Qdrant Cloud (Narratives + Building Codes)
+- **Vector DB**: Qdrant Cloud (Narratives + Standards)
 - **LLM**: OpenAI GPT-4o-mini + GPT-4
 - **Embeddings**: text-embedding-3-small
 - **Reranking**: Cohere rerank-english-v3.0
@@ -46,7 +46,7 @@ An AI-powered platform that transforms audio/visual inspection notes into profes
 **Demo Day Platform**: https://house-whisperer-demoday.vercel.app/
 - Create inspections with voice recordings
 - Generate professional reports with smart narratives
-- Test the narrative cascade (Verified → Building Code-Enhanced → Generated)
+- Test the narrative cascade (Narratives → Standards-Based → AI Generated)
 
 ## 🚀 If you want to run locally instead, 
 
@@ -109,10 +109,10 @@ npm start
 - **Voice-to-Report**: Record observations → Auto-transcribe → Generate narratives
 - **Smart Narrative Matching**: Semantic search across 6,500+ expert-written narratives
 - **Cohere Reranking**: 98%+ accuracy on technical matches (e.g., "4 inches" → "3-4 inch depth")
-- **Code Compliance**: Automatic building code references from 16,000+ indexed standards
+- **Standards Compliance**: Automatic references from 16,000+ indexed building codes & SOPs
 
 ### Report Intelligence
-- **Quality Scoring**: Track narrative sources (Verified/Building Code-Enhanced/Generated)
+- **Quality Scoring**: Track narrative sources (Narratives/Standards/AI Generated)
 - **Severity Classification**: Critical/Major/Minor/Info badges per section
 - **Executive Summary**: AI-generated overview of key findings
 - **Hybrid Narratives**: Combines technical codes with homeowner-friendly explanations
@@ -185,9 +185,9 @@ The system follows this priority order for each section:
    - If score ≥ 0.7: Use as "✅ Verified Narrative"
    - With Cohere reranker: Improves relevance to "🎯 Reranked Narrative"
 
-2. **Inspector RAG (Building Codes)** - When database score < 0.7
-   - Searches 16,632+ chunks of NC Building Codes & SOPs
-   - If confidence > 0.6: Use as "📋 Building Code-Enhanced Narrative"
+2. **Inspector RAG (Standards)** - When narrative score < 0.7 or standards keywords detected
+   - Searches 16,632+ chunks of building codes & SOPs
+   - If confidence > 0.6: Use as "📋 Standards-Based" or "🎯📋 Narratives+Standards"
    - Combines technical accuracy with regulatory compliance
 
 3. **GPT-4 Generation** - Final fallback

@@ -1098,70 +1098,29 @@ async def generate_report(req: GenerateReportRequest):
     if not req.inspectionId:
         raise HTTPException(status_code=400, detail="inspectionId is required")
     
-    # Check if enhanced version is requested (default to True for testing)
-    use_enhanced = req.enhanced if req.enhanced is not None else (os.getenv("USE_ENHANCED_REPORT", "1") == "1")
-    
-    if use_enhanced:
-        # Try to use enhanced version with reranker if Cohere is available
-        use_reranker = bool(os.getenv("COHERE_API_KEY"))
-        
-        if use_reranker:
-            try:
-                # Try reranker version first
-                try:
-                    from .langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker  # type: ignore
-                except Exception:
-                    try:
-                        from api.langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker  # type: ignore
-                    except Exception:
-                        from langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker  # type: ignore
-                
-                result = run_enhanced_report_with_reranker(req.inspectionId, req.sections or [])
-                if not result.get("markdown"):
-                    raise HTTPException(status_code=400, detail="No content generated (ensure clips exist and sections match)")
-                return {"ok": True, "saved": bool(result.get("saved")), "report": result, "version": "enhanced_reranker"}
-            except Exception as e:
-                print(f"Reranker version failed: {e}, falling back to enhanced")
-                use_reranker = False
-        
-        if not use_reranker:
-            # Use enhanced without reranker
-            try:
-                try:
-                    from .langgraph_report_writer_enhanced import run_enhanced_report  # type: ignore
-                except Exception:
-                    try:
-                        from api.langgraph_report_writer_enhanced import run_enhanced_report  # type: ignore
-                    except Exception:
-                        from langgraph_report_writer_enhanced import run_enhanced_report  # type: ignore
-                
-                result = run_enhanced_report(req.inspectionId, req.sections or [])
-                if not result.get("markdown"):
-                    raise HTTPException(status_code=400, detail="No content generated (ensure clips exist and sections match)")
-                return {"ok": True, "saved": bool(result.get("saved")), "report": result, "version": "enhanced"}
-            except Exception as e:
-                print(f"Enhanced report failed, falling back to original: {e}")
-                use_enhanced = False
-    
-    # Use original version (fallback or explicit choice)
-    if not use_enhanced:
+    # Always use the enhanced report with reranker
+    try:
+        # Import the enhanced report with reranker
         try:
-            from .langgraph_report_writer import run_report  # type: ignore
+            from .langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker  # type: ignore
         except Exception:
             try:
-                from api.langgraph_report_writer import run_report  # type: ignore
+                from api.langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker  # type: ignore
             except Exception:
-                try:
-                    from langgraph_report_writer import run_report  # type: ignore
-                except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"Report graph unavailable: {e}")
-        try:
-            result = run_report(req.inspectionId, req.sections or [])
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Report generation failed: {e}")
+                from langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker  # type: ignore
+        
+        # Run the report generation
+        result = run_enhanced_report_with_reranker(req.inspectionId, req.sections or [])
+        
         if not result.get("markdown"):
             raise HTTPException(status_code=400, detail="No content generated (ensure clips exist and sections match)")
-        return {"ok": True, "saved": bool(result.get("saved")), "report": result, "version": "original"}
+        
+        return {"ok": True, "saved": bool(result.get("saved")), "report": result, "version": "enhanced_reranker"}
+        
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"Report generation module not found: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {e}")
 
 
 class PublishReportRequest(BaseModel):

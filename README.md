@@ -149,8 +149,8 @@ npm start
 House_Whisperer/
 ├── api/
 │   ├── app.py                                      # FastAPI server with inspection endpoints
-│   ├── langgraph_report_writer_enhanced.py         # Enhanced report generation 
-│   ├── langgraph_report_writer_enhanced_reranker.py # With Cohere reranking
+│   ├── langgraph_report_writer_enhanced.py         # Base enhanced report module
+│   ├── langgraph_report_writer_enhanced_reranker.py # Main report generation with intelligent cascade
 │   ├── langgraph_inspector_rag.py                  # Building codes RAG system
 │   └── web_search_tools.py                         # Tavily integration for recalls
 ├── web/

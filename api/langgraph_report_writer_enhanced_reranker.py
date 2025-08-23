@@ -58,9 +58,11 @@ def _rerank_with_cohere(narratives: List[Dict], query: str, top_k: int = 5) -> L
     try:
         cohere_key = os.getenv('COHERE_API_KEY', '').strip()
         if not cohere_key:
+            print("⚠️ Cohere API key not found, using embedding scores only")
             # No Cohere key, return original order
             return narratives[:top_k]
         
+        print(f"✅ Cohere reranking enabled (key: ...{cohere_key[-4:]})")
         import cohere
         co = cohere.Client(cohere_key)
         
@@ -407,6 +409,10 @@ def run_enhanced_report_with_reranker(inspection_id: str, sections: Optional[Lis
     initial: ReportState = {"inspection_id": inspection_id, "sections_filter": sections or []}
     out: ReportState = graph.invoke(initial)  # type: ignore
     
+    # Determine version based on Cohere availability
+    has_cohere = bool(os.getenv('COHERE_API_KEY', '').strip())
+    version = "2.1_reranker" if has_cohere else "2.0_enhanced"
+    
     return {
         "markdown": out.get("markdown", ""),
         "sectionCount": out.get("section_count", 0),
@@ -415,5 +421,5 @@ def run_enhanced_report_with_reranker(inspection_id: str, sections: Optional[Lis
         "executiveSummary": out.get("executive_summary", ""),
         "reportQualityScore": out.get("report_quality_score", 0.5),
         "narrativeSources": out.get("narrative_sources", {}),
-        "version": "2.1_reranker"
+        "version": version
     }

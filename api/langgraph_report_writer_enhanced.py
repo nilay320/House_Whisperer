@@ -745,7 +745,10 @@ def _render_enhanced_markdown(
     lines.append(f"- **Quality Score:** {report_quality:.0%}")
     lines.append(f"- **Sections:** {section_count}")
     lines.append(f"- **Observations:** {clip_count}")
-    lines.append(f"- **Report Version:** 2.0 Enhanced")
+    # Determine version based on Cohere availability
+    has_cohere = bool(os.getenv('COHERE_API_KEY', '').strip())
+    version_display = "2.1 Reranker" if has_cohere else "2.0 Enhanced"
+    lines.append(f"- **Report Version:** {version_display}")
     lines.append("")
     
     markdown = "\n".join(lines).strip() + "\n"

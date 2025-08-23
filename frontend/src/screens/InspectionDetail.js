@@ -561,9 +561,11 @@ export default function InspectionDetail() {
                 {Object.entries(draft.sectionMetadata).map(([key, meta]) => {
                   const m = meta || {};
                   const nCount = m.narrativeCount || 0;
-                  const topScore = typeof m.topScore === 'number' ? m.topScore : 0;
+                  // Use qualityScore from enhanced report, fall back to topScore for old reports
+                  const score = typeof m.qualityScore === 'number' ? m.qualityScore 
+                    : typeof m.topScore === 'number' ? m.topScore : 0;
                   const minScore = parseFloat(process.env.REACT_APP_NARRATIVE_MIN_SCORE || '0.55');
-                  const mode = nCount > 0 ? (topScore < minScore ? 'low' : 'narrative') : 'summary';
+                  const mode = nCount > 0 ? (score < minScore ? 'low' : 'narrative') : 'summary';
                   const style = mode === 'narrative'
                     ? 'bg-green-100 text-green-800 border border-green-300 font-medium'
                     : mode === 'low'

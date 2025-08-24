@@ -169,6 +169,71 @@ def _boost_narrative_scores(narratives: List[Dict], clips: List[Dict]) -> List[D
     return narratives
 
 
+def _rerank_with_cohere(narratives: List[Dict], query: str, top_k: int = 5) -> List[Dict]:
+    """Use Cohere reranker to improve narrative ordering if available"""
+    try:
+        cohere_key = os.getenv('COHERE_API_KEY', '').strip()
+        if not cohere_key:
+            # No Cohere key, return original order
+            return narratives[:top_k]
+        
+        print(f"✅ Cohere reranking enabled (key: ...{cohere_key[-4:]})")
+        import cohere
+        co = cohere.Client(cohere_key)
+        
+        # Prepare documents for reranking
+        documents = []
+        for narrative in narratives:
+            text = narrative.get('text', '')
+            # Include metadata in the document for better context
+            payload = narrative.get('payload', {})
+            comment_name = payload.get('comment_name', '')
+            full_text = f"{comment_name}. {text}" if comment_name else text
+            documents.append(full_text)
+        
+        if not documents:
+            return []
+        
+        # Rerank using Cohere
+        try:
+            response = co.rerank(
+                model='rerank-english-v3.0',  # Latest model
+                query=query,
+                documents=documents,
+                top_n=min(top_k, len(documents)),
+                return_documents=False
+            )
+            
+            # Reorder narratives based on rerank results
+            reranked = []
+            for result in response.results:
+                idx = result.index
+                original_narrative = narratives[idx].copy()
+                # Add rerank score but keep original embedding score for display
+                original_narrative['rerank_score'] = result.relevance_score
+                original_narrative['reranked'] = True
+                reranked.append(original_narrative)
+            
+            if os.getenv("REPORT_LOGS") == "1":
+                print(f"[report] Cohere reranked {len(reranked)} narratives")
+            
+            return reranked
+            
+        except Exception as e:
+            if os.getenv("REPORT_LOGS") == "1":
+                print(f"[report] Cohere rerank failed: {e}, using original order")
+            return narratives[:top_k]
+            
+    except ImportError:
+        if os.getenv("REPORT_LOGS") == "1":
+            print("[report] Cohere library not installed, skipping reranking")
+        return narratives[:top_k]
+    except Exception as e:
+        if os.getenv("REPORT_LOGS") == "1":
+            print(f"[report] Reranking error: {e}")
+        return narratives[:top_k]
+
+
 def _retrieve_narratives_enhanced(section_key: str, clips: List[Dict], sections_catalog: List[Dict], top_k: int = 10, min_score: float = 0.55) -> List[Dict]:
     """Enhanced narrative retrieval with better context and scoring"""
     try:
@@ -232,6 +297,10 @@ def _retrieve_narratives_enhanced(section_key: str, clips: List[Dict], sections_
         
         # Apply keyword boosting
         out = _boost_narrative_scores(out, clips)
+        
+        # Apply Cohere reranking if available
+        transcript_query = ' '.join([c.get('transcript', '') for c in clips])
+        out = _rerank_with_cohere(out, transcript_query, top_k=top_k)
         
         return out
     except Exception as e:
@@ -374,23 +443,44 @@ def node_retrieve_narratives_with_fallback(state: ReportState) -> ReportState:
         # Step 1: Try enhanced narrative retrieval
         narratives = _retrieve_narratives_enhanced(section_key, clips, sections_catalog)
         
-        if narratives and narratives[0]['score'] >= 0.7:
-            # High-quality narrative found
+        # Check for code compliance keywords
+        code_keywords = ['code', 'violation', 'standard', 'requirement', 'compliance', 'safety']
+        transcript_text = ' '.join([c.get('transcript', '') for c in clips]).lower()
+        mentions_codes = any(keyword.lower() in transcript_text for keyword in code_keywords)
+        
+        # Accept reranked narratives with lower threshold (0.6) or regular with 0.7
+        accept_threshold = 0.6 if (narratives and narratives[0].get('reranked')) else 0.7
+        
+        if narratives and narratives[0]['score'] >= accept_threshold and not mentions_codes:
+            # High-quality narrative found and no code compliance needed
             narratives_by_section[section_key] = narratives[:3]  # Top 3
-            narrative_sources[section_key] = 'verified_narrative'
-            quality_scores[section_key] = narratives[0]['score']
+            # Check if reranked by Cohere
+            if narratives[0].get('reranked'):
+                narrative_sources[section_key] = 'reranked_narrative'
+                # Boost quality score for reranked narratives
+                quality_scores[section_key] = min(narratives[0]['score'] * 1.2, 0.95)
+            else:
+                narrative_sources[section_key] = 'verified_narrative'
+                quality_scores[section_key] = narratives[0]['score']
             
             # Extract severity from best narrative
             section_severity[section_key] = narratives[0].get('severity', 'info')
             
             if os.getenv("REPORT_LOGS") == "1":
-                print(f"[report] {section_key}: ✅ Verified narrative (score={narratives[0]['score']:.2f})")
+                if narratives[0].get('reranked'):
+                    rerank_score = narratives[0].get('rerank_score', 0)
+                    print(f"[report] {section_key}: 🎯 Reranked narrative (embed={narratives[0]['score']:.2f}, rerank={rerank_score:.2f})")
+                else:
+                    print(f"[report] {section_key}: ✅ Verified narrative (score={narratives[0]['score']:.2f})")
         
         else:
-            # Low-quality match - enter fallback loop
+            # Low score OR code compliance mentioned - enter fallback loop
             if os.getenv("REPORT_LOGS") == "1":
                 best_score = narratives[0]['score'] if narratives else 0
-                print(f"[report] {section_key}: ⚠️ Low narrative score ({best_score:.2f}), trying fallback...")
+                if mentions_codes:
+                    print(f"[report] {section_key}: 📚 Code compliance mentioned, adding RAG...")
+                else:
+                    print(f"[report] {section_key}: ⚠️ Low score ({best_score:.2f}), trying RAG...")
             
             # Step 2: Try Inspector RAG
             rag_result = _query_inspector_rag(section_key, clips)
@@ -520,9 +610,9 @@ def _get_source_badge(source: str, score: float = 0) -> str:
     elif source == 'reranked_narrative':
         return f'🎯 **Reranked Narratives** ({score:.0%} match)'
     elif source == 'hybrid_code_narrative':
-        return f'🎯📋 **Narratives + Standards** ({score:.0%} confidence)'
+        return f'🎯📋 **Narratives+Standards** ({score:.0%} confidence)'
     elif source == 'building_code_enhanced':
-        return f'📋 **Standards-Based** ({score:.0%} confidence)'
+        return f'📋 **Standards** ({score:.0%} confidence)'
     elif source == 'ai_generated':
         return '🤖 **AI Generated**'
     else:
@@ -640,13 +730,15 @@ def _render_enhanced_markdown(
         
         source_text = source.replace('_', ' ').title()
         if source == 'verified_narrative':
-            source_text = f"✅ Verified Narrative"
+            source_text = f"✅ Narratives"
         elif source == 'building_code_enhanced':
-            source_text = f"📋 Building Code-Enhanced"
+            source_text = f"📋 Standards"
         elif source == 'ai_generated':
             source_text = f"🤖 AI Generated"
         elif source == 'reranked_narrative':
-            source_text = f"🎯 Reranked Narrative"
+            source_text = f"🎯 Narratives"
+        elif source == 'hybrid_code_narrative':
+            source_text = f"🎯📋 Narratives+Standards"
         
         severity_badge = _get_severity_badge(severity).split()[0]  # Just emoji
         lines.append(f"- **{label}**: {source_text} ({score:.0%}) {severity_badge}")
@@ -832,9 +924,16 @@ def build_enhanced_report_graph():
 @traceable(name="run_enhanced_report")
 def run_enhanced_report(inspection_id: str, sections: Optional[List[str]] = None) -> Dict:
     """Run the enhanced report generation with intelligent fallback"""
+    import time
+    start_time = time.time()
+    
     graph = build_enhanced_report_graph()
     initial: ReportState = {"inspection_id": inspection_id, "sections_filter": sections or []}
     out: ReportState = graph.invoke(initial)  # type: ignore
+    
+    # Calculate duration
+    duration = time.time() - start_time
+    logger.info(f"📊 SEQUENTIAL report generation took {duration:.2f} seconds for inspection {inspection_id}")
     
     return {
         "markdown": out.get("markdown", ""),
@@ -844,7 +943,8 @@ def run_enhanced_report(inspection_id: str, sections: Optional[List[str]] = None
         "executiveSummary": out.get("executive_summary", ""),
         "reportQualityScore": out.get("report_quality_score", 0.5),
         "narrativeSources": out.get("narrative_sources", {}),
-        "version": get_report_version()
+        "version": get_report_version(),
+        "processingDuration": duration
     }
 
 

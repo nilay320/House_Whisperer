@@ -24,11 +24,11 @@ def generate_test_report():
     print(f"   Using Cohere: {'YES' if os.getenv('COHERE_API_KEY') else 'NO'}")
     
     try:
-        # Import the reranker version
-        from langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker
+        # Import the enhanced report (now includes Cohere when available)
+        from langgraph_report_writer_enhanced import run_enhanced_report
         
-        print("\n📝 Running enhanced report with reranker...")
-        result = run_enhanced_report_with_reranker(inspection_id)
+        print("\n📝 Running enhanced report...")
+        result = run_enhanced_report(inspection_id)
         
         if result and result.get('markdown'):
             markdown = result['markdown']

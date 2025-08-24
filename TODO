@@ -13,3 +13,12 @@ Keep current keyword fallback if embeddings unavailable; gate with USE_NARRATIVE
 
 
 
+
+//TECH DEBT/pre-submission
+
+Move config to standard place instead of two plces
+README.md for running.
+
+README.md: index time normalization for narrative section -> clip / report section.
+
+LIST 

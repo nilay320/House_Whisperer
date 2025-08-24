@@ -1098,22 +1098,80 @@ async def generate_report(req: GenerateReportRequest):
     if not req.inspectionId:
         raise HTTPException(status_code=400, detail="inspectionId is required")
     
+    # Check for report mode (subgraph > parallel > sequential)
+    use_subgraph = os.getenv("USE_SUBGRAPH_REPORT", "false").lower() == "true"
+    use_parallel = os.getenv("USE_PARALLEL_REPORT", "true").lower() == "true"
+    
     # Always use the enhanced report with reranker
     try:
-        # Import the enhanced report with reranker
-        try:
-            from .langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker  # type: ignore
-        except Exception:
+        if use_subgraph:
+            # Use new subgraph version with quality loops
             try:
-                from api.langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker  # type: ignore
+                from langgraph_report_writer_subgraph import generate_report_with_subgraph  # type: ignore
+                print(f"🎯 Using SUBGRAPH report generation with quality loops")
+                print(f"   • Inspection ID: {req.inspectionId}")
+                print(f"   • Quality threshold: {os.getenv('QUALITY_THRESHOLD', '0.75')}")
+                print(f"   • Max iterations: {os.getenv('MAX_QUALITY_ITERATIONS', '2')}")
+                print(f"   • Quality loop: {os.getenv('ENABLE_QUALITY_LOOP', 'true')}")
+                result = await generate_report_with_subgraph(req.inspectionId)
+                print(f"✅ Subgraph completed, result keys: {result.keys() if result else 'None'}")
+            except ImportError as e:
+                print(f"⚠️ Subgraph import error ({e}), falling back to parallel")
+                try:
+                    from langgraph_report_writer_parallel import run_parallel_report  # type: ignore
+                except ImportError:
+                    from .langgraph_report_writer_parallel import run_parallel_report  # type: ignore
+                result = run_parallel_report(req.inspectionId, req.sections or [])
+            except Exception as e:
+                print(f"❌ Subgraph runtime error: {e}")
+                import traceback
+                traceback.print_exc()
+                print(f"⚠️ Falling back to parallel")
+                try:
+                    from langgraph_report_writer_parallel import run_parallel_report  # type: ignore
+                except ImportError:
+                    from .langgraph_report_writer_parallel import run_parallel_report  # type: ignore
+                result = run_parallel_report(req.inspectionId, req.sections or [])
+        elif use_parallel:
+            # Use parallel version
+            try:
+                from langgraph_report_writer_parallel import run_parallel_report  # type: ignore
+                result = run_parallel_report(req.inspectionId, req.sections or [])
+                print(f"✅ Using PARALLEL report generation")
+            except ImportError:
+                # Fallback to sequential if parallel not available
+                print(f"⚠️ Parallel not available, falling back to sequential")
+                try:
+                    from langgraph_report_writer_enhanced import run_enhanced_report  # type: ignore
+                except ImportError:
+                    from .langgraph_report_writer_enhanced import run_enhanced_report  # type: ignore
+                result = run_enhanced_report(req.inspectionId, req.sections or [])
+        else:
+            # Use existing sequential version
+            try:
+                from .langgraph_report_writer_enhanced import run_enhanced_report  # type: ignore
             except Exception:
-                from langgraph_report_writer_enhanced_reranker import run_enhanced_report_with_reranker  # type: ignore
-        
-        # Run the report generation
-        result = run_enhanced_report_with_reranker(req.inspectionId, req.sections or [])
+                try:
+                    from api.langgraph_report_writer_enhanced import run_enhanced_report  # type: ignore
+                except Exception:
+                    from langgraph_report_writer_enhanced import run_enhanced_report  # type: ignore
+            
+            result = run_enhanced_report(req.inspectionId, req.sections or [])
+            print(f"📝 Using SEQUENTIAL report generation")
         
         if not result.get("markdown"):
             raise HTTPException(status_code=400, detail="No content generated (ensure clips exist and sections match)")
+        
+        # Log processing duration if available
+        if "processingDuration" in result:
+            duration = result["processingDuration"]
+            if use_subgraph:
+                mode = "SUBGRAPH"
+            elif use_parallel:
+                mode = "PARALLEL"
+            else:
+                mode = "SEQUENTIAL"
+            print(f"⏱️  {mode} report generation completed in {duration:.2f} seconds")
         
         return {"ok": True, "saved": bool(result.get("saved")), "report": result, "version": "enhanced_reranker"}
         

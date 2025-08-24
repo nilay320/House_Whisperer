@@ -22,16 +22,16 @@ const InspectorShell = ({ onOpenChat }) => (
           onClick={onOpenChat}
           className="bg-white rounded-lg border p-4 hover:bg-gray-50 transition-colors text-left w-full group"
         >
-          <h3 className="font-semibold mb-2 group-hover:text-blue-600 transition-colors">Standards Q&A</h3>
+          <h3 className="font-semibold mb-2 group-hover:text-emerald-500 transition-colors">Standards Q&A</h3>
           <p className="text-sm text-gray-600 mb-3">Ask about InterNACHI, NCHILB, and NC codes.</p>
-          <p className="text-xs text-blue-600 group-hover:text-blue-700">Click to open chat assistant →</p>
+          <p className="text-xs text-emerald-500 group-hover:text-emerald-600">Click to open chat assistant →</p>
         </button>
         <div className="bg-white rounded-lg border p-4">
           <h3 className="font-semibold mb-2">Inspections</h3>
           <p className="text-sm text-gray-600">Start a new inspection or open an existing one.</p>
           <div className="flex gap-4 text-sm">
-            <Link to="/inspection/new" className="text-blue-600 hover:underline">Start Inspection</Link>
-            <Link to="/inspections" className="text-blue-600 hover:underline">View Inspections</Link>
+            <Link to="/inspection/new" className="text-emerald-500 hover:underline focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none rounded">Start Inspection</Link>
+            <Link to="/inspections" className="text-emerald-500 hover:underline focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none rounded">View Inspections</Link>
           </div>
         </div>
         

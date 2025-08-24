@@ -497,7 +497,7 @@ const ChatbotWidget = React.forwardRef((props, ref) => {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed right-4 bottom-4 md:right-6 md:bottom-6 z-50 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 transition-colors"
+        className="fixed right-4 bottom-4 md:right-6 md:bottom-6 z-50 bg-emerald-600 text-white p-4 rounded-full shadow-lg hover:bg-emerald-700 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
       >
         <AnimatePresence mode="wait">
           {isOpen ? (
@@ -537,19 +537,19 @@ const ChatbotWidget = React.forwardRef((props, ref) => {
             }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-t-2xl">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
                   <Bot size={16} />
                 </div>
                 <div>
                   <h3 className="font-semibold">NC Home Inspector AI</h3>
-                  <p className="text-xs text-blue-100">InterNACHI • NCHILB • NC Building Codes</p>
+                  <p className="text-xs text-emerald-100">InterNACHI • NCHILB • NC Building Codes</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-blue-100 hover:text-white transition-colors"
+                className="text-emerald-100 hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none rounded"
               >
                 <X size={20} />
               </button>
@@ -571,7 +571,7 @@ const ChatbotWidget = React.forwardRef((props, ref) => {
                     />
                   ) : (
                     <div className="flex justify-end">
-                      <div className="max-w-[85%] rounded-2xl bg-blue-600 text-white px-4 py-3">
+                      <div className="max-w-[85%] rounded-2xl bg-emerald-600 text-white px-4 py-3">
                         <div className="flex items-start space-x-2">
                           <div className="flex-1">
                             <p className="text-sm leading-relaxed">{message.content}</p>
@@ -579,7 +579,7 @@ const ChatbotWidget = React.forwardRef((props, ref) => {
                               {formatTime(message.timestamp)}
                             </p>
                           </div>
-                          <User size={16} className="mt-1 text-blue-100 flex-shrink-0" />
+                          <User size={16} className="mt-1 text-emerald-100 flex-shrink-0" />
                         </div>
                       </div>
                     </div>
@@ -595,7 +595,7 @@ const ChatbotWidget = React.forwardRef((props, ref) => {
                 >
                   <div className="bg-gray-100 text-gray-800 rounded-2xl px-4 py-3">
                     <div className="flex items-center space-x-2">
-                      <Bot size={16} className="text-blue-600" />
+                      <Bot size={16} className="text-emerald-600" />
                       <div className="flex space-x-1">
                         <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                         <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -611,12 +611,12 @@ const ChatbotWidget = React.forwardRef((props, ref) => {
 
             {/* Info Section - Enhanced */}
             <div className="px-4 pb-2">
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3">
+              <div className="bg-gradient-to-r from-emerald-50 to-emerald-100 border border-emerald-200 rounded-lg p-3">
                 <div className="flex items-start space-x-2">
-                  <BookOpen size={16} className="text-blue-600 mt-0.5" />
-                  <div className="text-sm text-blue-800 flex-1">
+                  <BookOpen size={16} className="text-emerald-600 mt-0.5" />
+                  <div className="text-sm text-emerald-800 flex-1">
                     <p className="font-medium">NC Inspector Knowledge Base</p>
-                    <p className="text-xs text-blue-600 mt-1">
+                    <p className="text-xs text-emerald-700 mt-1">
                       Powered by InterNACHI SOP, NCHILB regulations, and 2024 NC Building Codes
                     </p>
                   </div>
@@ -634,7 +634,7 @@ const ChatbotWidget = React.forwardRef((props, ref) => {
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Ask about inspection standards, codes, or regulations..."
-                    className="w-full resize-none border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white shadow-sm"
+                    className="w-full resize-none border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm bg-white shadow-sm"
                     rows={1}
                     style={{ minHeight: '44px', maxHeight: '120px' }}
                   />
@@ -642,7 +642,7 @@ const ChatbotWidget = React.forwardRef((props, ref) => {
                 <button
                   onClick={handleSendMessage}
                   disabled={!inputValue.trim() || isLoading}
-                  className="bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex-shrink-0"
+                  className="bg-emerald-600 text-white p-3 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex-shrink-0 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
                   style={{ minHeight: '44px', minWidth: '44px' }}
                 >
                   <Send size={18} />

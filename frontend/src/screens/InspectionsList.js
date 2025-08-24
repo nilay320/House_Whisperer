@@ -71,7 +71,7 @@ export default function InspectionsList({ user }) {
             </Link>
             <h2 className="text-2xl font-bold">My Inspections</h2>
           </div>
-          <Link to="/inspection/new" className="text-sm text-blue-600 hover:underline">Start Inspection</Link>
+          <Link to="/inspection/new" className="text-sm text-emerald-500 hover:underline">Start Inspection</Link>
         </div>
         <div className="bg-white border rounded-lg shadow-sm">
           <table className="w-full text-sm">
@@ -86,7 +86,7 @@ export default function InspectionsList({ user }) {
             </thead>
             <tbody>
               {items.map((it) => (
-                <tr key={it.id} className="border-b hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-200 cursor-pointer">
+                <tr key={it.id} className="border-b hover:bg-gradient-to-r hover:from-emerald-50 hover:to-purple-50 transition-all duration-200 cursor-pointer">
                   <td className="p-3">
                     <div className="font-medium text-gray-900">
                       {it.address || 'No address provided'}
@@ -117,7 +117,7 @@ export default function InspectionsList({ user }) {
                     <div className="flex items-center gap-2">
                       <Link 
                         to={`/inspection/${it.id}`} 
-                        className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                        className="text-emerald-600 hover:text-emerald-700 hover:underline font-medium focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none rounded"
                       >
                         Open
                       </Link>

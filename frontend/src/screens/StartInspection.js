@@ -55,7 +55,7 @@ export default function StartInspection() {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="123 Main St, Raleigh, NC 27605"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               disabled={loading}
             />
             <p className="text-xs text-gray-500 mt-1">
@@ -66,7 +66,7 @@ export default function StartInspection() {
           <button 
             onClick={start} 
             disabled={loading || !address.trim()}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+            className="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
           >
             {loading ? 'Creating...' : 'Start Inspection'}
           </button>

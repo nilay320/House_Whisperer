@@ -42,13 +42,13 @@ code {
    This layer gently overrides common Tailwind utility colors without structural changes.
 ============================= */
 :root {
-  --cy-bg: #0f1115;
-  --cy-panel: #0d1117;
-  --cy-card: rgba(255, 255, 255, 0.04);
-  --cy-text: #cfe6ff;
-  --cy-muted: #9ab3c8;
-  --cy-border: rgba(255, 255, 255, 0.14);
-  --cy-accent: #60f7d2;
+  --cy-bg: #0f172a;
+  --cy-panel: #111827;
+  --cy-card: #111827;
+  --cy-text: #e5e7eb;
+  --cy-muted: #9ca3af;
+  --cy-border: #1f2937;
+  --cy-accent: #34d399;
 }
 
 [data-theme='cyber'] body { background: var(--cy-bg); color: var(--cy-text); }
@@ -85,8 +85,8 @@ code {
 }
 
 [data-theme='cyber'] select:focus {
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1) !important;
 }
 
 [data-theme='cyber'] option {
@@ -118,8 +118,8 @@ code {
 }
 
 [data-theme='cyber'] input[type="text"]:focus {
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1) !important;
 }
 
 [data-theme='cyber'] input[type="text"]::placeholder {
@@ -276,8 +276,8 @@ code {
 
 /* Simple header gradient utility (attach with class="cy-gradient") */
 .cy-gradient {
-  background: radial-gradient(1200px 400px at 10% -10%, rgba(96,247,210,.18), transparent 60%),
-              radial-gradient(1000px 400px at 90% -10%, rgba(96,247,210,.1), transparent 50%),
+  background: radial-gradient(1200px 400px at 10% -10%, rgba(52,211,153,.18), transparent 60%),
+              radial-gradient(1000px 400px at 90% -10%, rgba(52,211,153,.10), transparent 50%),
               linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,0));
 }
 

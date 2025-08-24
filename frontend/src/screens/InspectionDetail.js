@@ -286,7 +286,7 @@ export default function InspectionDetail() {
             <div className="text-xs text-gray-700 font-medium mb-2">Table of Contents</div>
             <div className="flex flex-wrap gap-2">
               {headings.map(h => (
-                <button key={h.id} onClick={() => scrollToId(h.id)} className={`text-xs px-3 py-1.5 rounded-md border font-medium ${h.level===2 ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'} transition-colors`} title={h.text}>{h.text}</button>
+                <button key={h.id} onClick={() => scrollToId(h.id)} className={`text-xs px-3 py-1.5 rounded-md border font-medium ${h.level===2 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'} transition-colors`} title={h.text}>{h.text}</button>
               ))}
             </div>
           </div>
@@ -319,7 +319,7 @@ export default function InspectionDetail() {
               ul: ({ node, ...props }) => <ul className="list-disc ml-5 my-2 text-sm" {...props} />,
               ol: ({ node, ...props }) => <ol className="list-decimal ml-5 my-2 text-sm" {...props} />,
               li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-              a: ({ node, ...props }) => <a className="text-blue-600 underline" {...props} />,
+              a: ({ node, ...props }) => <a className="text-emerald-400 underline" {...props} />,
               img: ({ node, ...props }) => <img className="w-full max-w-md max-h-64 object-contain rounded border my-2" {...props} />,
             }}
           >
@@ -404,7 +404,7 @@ export default function InspectionDetail() {
                   </button>
                   {canSave ? (
                     <button 
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors font-medium text-sm"
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 transition-colors font-medium text-sm"
                       onClick={saveClip}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -505,7 +505,7 @@ export default function InspectionDetail() {
               {clips.map(c => (
                 <div key={c.id} className="border rounded p-3">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-700">ID: <span className="font-mono">{c.id}</span><span title={c.section || 'uncategorized'} className="ml-2 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{c.section ? labelFor(c.section) : 'Uncategorized'}</span></div>
+                    <div className="text-sm text-gray-700">ID: <span className="font-mono">{c.id}</span><span title={c.section || 'uncategorized'} className="ml-2 text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">{c.section ? labelFor(c.section) : 'Uncategorized'}</span></div>
                     <span className={`text-xs px-2 py-1 rounded-full ${c.status==='done'?'bg-green-100 text-green-700':c.status==='processing'?'bg-yellow-100 text-yellow-700':'bg-gray-100 text-gray-700'}`}>{c.status}</span>
                   </div>
                   {c.transcript && <pre className="mt-2 text-sm bg-gray-50 p-2 rounded whitespace-pre-wrap">{c.transcript}</pre>}
@@ -535,13 +535,13 @@ export default function InspectionDetail() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-bold text-gray-900">Report Draft</h3>
             <div className="flex items-center gap-2">
-              <button className={`px-3 py-2 rounded text-white ${generating?'bg-gray-400':'bg-blue-600 hover:bg-blue-700'}`} onClick={generateDraft} disabled={generating}>
+              <button className={`${generating?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={generateDraft} disabled={generating}>
                 {generating ? 'Generating…' : 'Generate Draft'}
               </button>
-              <button className={`px-3 py-2 rounded text-white ${publishing || !draft?'bg-gray-400':'bg-green-600 hover:bg-green-700'}`} onClick={publishDraft} disabled={publishing || !draft}>
+              <button className={`${publishing || !draft?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={publishDraft} disabled={publishing || !draft}>
                 {publishing ? 'Publishing…' : 'Publish Final Draft'}
               </button>
-              <button className={`px-3 py-2 rounded text-white ${!draft?'bg-gray-400':'bg-blue-600 hover:bg-blue-700'} transition-colors`} onClick={downloadPDF} disabled={!draft}>Download PDF</button>
+              <button className={`${!draft?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={downloadPDF} disabled={!draft}>Download PDF</button>
             </div>
           </div>
           <div className="text-xs text-gray-700 mb-2 flex items-center gap-2">

@@ -44,3 +44,5 @@ htmlcov/
 __pycache__/
 *.py[cod]\
 **/NARRATIVE*.csv
+**/service.json
+data/*

@@ -1185,8 +1185,50 @@ class PublishReportRequest(BaseModel):
     inspectionId: str
     title: Optional[str] = None
 
-class GeneratePDFRequest(BaseModel):
+
+class UpdateDraftRequest(BaseModel):
     inspectionId: str
+    markdown: str
+
+
+@app.post("/api/update_draft")
+async def update_draft(req: UpdateDraftRequest):
+    """Update the markdown content of a draft report while preserving metadata"""
+    if not req.inspectionId:
+        raise HTTPException(status_code=400, detail="inspectionId is required")
+    if not req.markdown:
+        raise HTTPException(status_code=400, detail="markdown is required")
+    if not admin_db:
+        raise HTTPException(status_code=500, detail="Firestore admin not initialized")
+    
+    try:
+        draft_ref = admin_db.collection('inspections').document(req.inspectionId).collection('reports').document('draft')
+        
+        # Get existing draft to preserve metadata
+        existing = draft_ref.get()
+        if existing.exists:
+            existing_data = existing.to_dict() or {}
+            # Preserve sectionMetadata and other fields, update markdown
+            update_data = {
+                'markdown': req.markdown,
+                'updatedAt': admin_firestore.SERVER_TIMESTAMP,
+                'sectionMetadata': existing_data.get('sectionMetadata', {}),
+                'editedBy': 'user'  # Mark as user-edited
+            }
+        else:
+            # Create new draft if doesn't exist
+            update_data = {
+                'markdown': req.markdown,
+                'createdAt': admin_firestore.SERVER_TIMESTAMP,
+                'updatedAt': admin_firestore.SERVER_TIMESTAMP,
+                'editedBy': 'user'
+            }
+        
+        draft_ref.set(update_data, merge=True)
+        return {"ok": True, "message": "Draft updated successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Update failed: {e}")
 
 
 @app.post("/api/publish_report")

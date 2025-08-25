@@ -30,10 +30,13 @@ export default function InspectionDetail() {
   const [draft, setDraft] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editedMarkdown, setEditedMarkdown] = useState('');
+  const [saving, setSaving] = useState(false);
   const streamRef = useRef(null);
   const timerRef = useRef(null);
 
-  const selectedSection = useMemo(() => sectionOptions.find(o => o.key === sectionKey), [sectionKey, sectionOptions]);
+  const selectedSection = useMemo(() => sectionKey ? sectionOptions.find(o => o.key === sectionKey) : null, [sectionKey, sectionOptions]);
 
   useEffect(() => {
     // Load section options from backend YAML
@@ -81,7 +84,11 @@ export default function InspectionDetail() {
   useEffect(() => {
     const dref = doc(db, 'inspections', id, 'reports', 'draft');
     const unsub = onSnapshot(dref, (snap) => {
-      setDraft(snap.exists() ? ({ id: snap.id, ...snap.data() }) : null);
+      const draftData = snap.exists() ? ({ id: snap.id, ...snap.data() }) : null;
+      setDraft(draftData);
+      if (draftData?.markdown) {
+        setEditedMarkdown(draftData.markdown);
+      }
     });
     return () => unsub();
   }, [id]);
@@ -149,8 +156,8 @@ export default function InspectionDetail() {
 
   const transcriptPreview = useMemo(() => '', [chunks, recordedBlob]);
 
-  const canSave = !!sectionKey && (recordedBlob || chunks.length);
-  const needsSection = !sectionKey && (recordedBlob || chunks.length);
+  const canSave = !!sectionKey && (recordedBlob || chunks.length > 0);
+  const needsSection = !sectionKey && (recordedBlob || chunks.length > 0);
 
   const saveClip = async () => {
     if (!sectionKey) return;
@@ -213,6 +220,32 @@ export default function InspectionDetail() {
     } finally {
       setPublishing(false);
     }
+  };
+
+  const saveDraft = async () => {
+    try {
+      setSaving(true);
+      await apiPost('/api/update_draft', { 
+        inspectionId: id, 
+        markdown: editedMarkdown 
+      });
+      setEditMode(false);
+    } catch (e) {
+      console.error('update_draft failed', e);
+      alert('Failed to save draft. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEdit = () => {
+    setEditedMarkdown(draft?.markdown || '');
+    setEditMode(true);
+  };
+
+  const cancelEdit = () => {
+    setEditedMarkdown(draft?.markdown || '');
+    setEditMode(false);
   };
 
   const downloadPDF = async () => {
@@ -476,10 +509,10 @@ export default function InspectionDetail() {
                 {needsSection && (
                   <div className="mt-1 text-xs text-red-600">Select a section to enable Save.</div>
                 )}
-                {selectedSection && selectedSection.includes && selectedSection.includes.length > 0 && (
+                {selectedSection && selectedSection.includes && selectedSection.includes.length > 0 ? (
                   <div className="mt-1 text-xs text-gray-500">Includes: {selectedSection.includes.join(', ')}</div>
-                )}
-                {requiredSections.length > 0 && (!isComplete || clips.length < 3) && (
+                ) : null}
+                {(requiredSections && requiredSections.length > 0 && (!isComplete || clips.length < 3)) ? (
                   <div className="mt-2 text-xs text-gray-600">
                     <span className="mr-1">Required:</span>
                     <div className="mt-1 flex flex-wrap gap-1">
@@ -491,10 +524,12 @@ export default function InspectionDetail() {
                           </span>
                         );
                       })}
-                      <span className={`ml-2 ${isComplete ? 'text-green-700' : 'text-amber-700'}`}>{REQUIRED_SECTIONS.length - missingRequired.length}/{REQUIRED_SECTIONS.length} complete</span>
+                      {sectionKey && (
+                        <span className={`ml-2 ${isComplete ? 'text-green-700' : 'text-amber-700'}`}>{REQUIRED_SECTIONS.length - missingRequired.length}/{REQUIRED_SECTIONS.length} complete</span>
+                      )}
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -535,13 +570,31 @@ export default function InspectionDetail() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-bold text-gray-900">Report Draft</h3>
             <div className="flex items-center gap-2">
-              <button className={`${generating?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={generateDraft} disabled={generating}>
-                {generating ? 'Generating…' : 'Generate Draft'}
-              </button>
-              <button className={`${publishing || !draft?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={publishDraft} disabled={publishing || !draft}>
-                {publishing ? 'Publishing…' : 'Publish Final Draft'}
-              </button>
-              <button className={`${!draft?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={downloadPDF} disabled={!draft}>Download PDF</button>
+              {editMode ? (
+                <>
+                  <button className={`${saving?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={saveDraft} disabled={saving}>
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button className="px-3 py-2 rounded text-gray-700 bg-gray-200 hover:bg-gray-300 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:outline-none" onClick={cancelEdit}>
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className={`${generating?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={generateDraft} disabled={generating}>
+                    {generating ? 'Generating…' : 'Generate Draft'}
+                  </button>
+                  {draft && (
+                    <button className="px-3 py-2 rounded text-emerald-700 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none" onClick={startEdit}>
+                      Edit
+                    </button>
+                  )}
+                  <button className={`${publishing || !draft?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={publishDraft} disabled={publishing || !draft}>
+                    {publishing ? 'Publishing…' : 'Publish Final Draft'}
+                  </button>
+                  <button className={`${!draft?'bg-gray-400':'bg-emerald-600 hover:bg-emerald-700'} px-3 py-2 rounded text-white transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none`} onClick={downloadPDF} disabled={!draft}>Download PDF</button>
+                </>
+              )}
             </div>
           </div>
           <div className="text-xs text-gray-700 mb-2 flex items-center gap-2">
@@ -583,7 +636,19 @@ export default function InspectionDetail() {
               </div>
             </div>
           )}
-          {draft?.markdown ? (
+          {editMode ? (
+            <div className="relative">
+              <textarea
+                value={editedMarkdown}
+                onChange={(e) => setEditedMarkdown(e.target.value)}
+                className="w-full h-96 p-4 border rounded-lg bg-white text-gray-900 font-mono text-sm resize-y focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                placeholder="Enter markdown content..."
+              />
+              <div className="absolute top-2 right-2 text-xs text-gray-500 bg-white px-2 py-1 rounded border">
+                Markdown Editor
+              </div>
+            </div>
+          ) : draft?.markdown ? (
             <MarkdownPreview markdown={draft.markdown} />
           ) : (
             <p className="text-sm text-gray-500">No draft yet. Click "Generate Draft" to build a report from current clips.</p>

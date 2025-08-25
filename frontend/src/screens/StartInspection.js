@@ -15,20 +15,32 @@ export default function StartInspection() {
       return;
     }
 
+    // Ensure user is authenticated
+    if (!auth.currentUser) {
+      alert('You must be logged in to create an inspection');
+      navigate('/');
+      return;
+    }
+
     setLoading(true);
     try {
-      const insp = await apiPost('/api/inspections', { address: address.trim() });
+      const insp = await apiPost('/api/inspections', { 
+        address: address.trim(),
+        ownerUid: auth.currentUser.uid  // Send ownerUid to backend
+      });
+      
+      // Also update in Firestore to ensure consistency
       try {
         await setDoc(doc(db, 'inspections', insp.id), {
-          ownerUid: auth.currentUser?.uid || null,
+          ownerUid: auth.currentUser.uid,
           address: address.trim(),
           createdAt: serverTimestamp(),
           status: 'in_progress',
         }, { merge: true });
       } catch (e) {
-        // non-fatal in dev
-        // eslint-disable-next-line no-console
-        console.warn('Firestore write failed (non-fatal):', e);
+        // If Firestore update fails, it's critical since we need ownerUid
+        console.error('Failed to set ownerUid in Firestore:', e);
+        // Continue anyway since backend might have set it
       }
       navigate(`/inspection/${insp.id}`);
     } catch (error) {

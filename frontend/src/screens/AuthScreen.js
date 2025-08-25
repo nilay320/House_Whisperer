@@ -15,11 +15,20 @@ const AuthScreen = () => {
       setLoading(false);
       return;
     }
-    const { role } = await getUserRole(user.uid);
-    if (!role) {
-      // Auto-assign inspector for first login
-      await setUserRole(user.uid, 'inspector');
+    
+    // Always ensure user has inspector role
+    const { role, error: roleError } = await getUserRole(user.uid);
+    if (!role || role !== 'inspector') {
+      // Auto-assign inspector role (for new users or users without proper role)
+      const { error: setRoleError } = await setUserRole(user.uid, 'inspector');
+      if (setRoleError) {
+        console.error('Failed to set role:', setRoleError);
+        // Continue anyway - user can still use the app
+      } else {
+        console.log('Inspector role assigned successfully');
+      }
     }
+    
     setLoading(false);
     // App will route based on auth state
     window.location.reload();

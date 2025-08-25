@@ -4,7 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import ChatbotWidget from './components/ChatbotWidget';
 import CyberThemeInit from './components/ThemeToggle';
 import AuthScreen from './screens/AuthScreen';
-import { onAuthStateChange, getUserRole, signOutUser } from './services/firebase';
+import { onAuthStateChange, getUserRole, setUserRole, signOutUser } from './services/firebase';
 import { Home, MessageCircle, BookOpen } from 'lucide-react';
 import StartInspection from './screens/StartInspection';
 import InspectionDetail from './screens/InspectionDetail';
@@ -75,7 +75,21 @@ function App() {
       if (u) {
         setRoleLoading(true);
         const { role } = await getUserRole(u.uid);
-        setRole(role);
+        
+        // If user doesn't have a role, automatically assign inspector
+        if (!role || role !== 'inspector') {
+          const { error } = await setUserRole(u.uid, 'inspector');
+          if (!error) {
+            setRole('inspector');
+          } else {
+            console.error('Failed to auto-assign inspector role:', error);
+            // Set inspector role anyway for UI purposes
+            setRole('inspector');
+          }
+        } else {
+          setRole(role);
+        }
+        
         setRoleLoading(false);
       } else {
         setRole(null);

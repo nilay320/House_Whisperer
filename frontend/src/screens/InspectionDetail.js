@@ -60,7 +60,15 @@ export default function InspectionDetail() {
     const inspRef = doc(db, 'inspections', id);
     const unsub = onSnapshot(inspRef, (snap) => {
       if (snap.exists()) {
-        setInspection({ id: snap.id, ...snap.data() });
+        const data = snap.data();
+        // Check if the inspection belongs to the current user
+        if (data.ownerUid && auth.currentUser && data.ownerUid !== auth.currentUser.uid) {
+          // User doesn't own this inspection, redirect to list
+          alert('You do not have permission to view this inspection.');
+          window.location.href = '/inspections';
+          return;
+        }
+        setInspection({ id: snap.id, ...data });
       } else {
         setInspection({ id });
       }
@@ -184,7 +192,7 @@ export default function InspectionDetail() {
       section: sectionKey || null,
       status: 'queued',
       createdAt: serverTimestamp(),
-      ownerUid: null,
+      ownerUid: auth.currentUser?.uid || null,
     }, { merge: true });
 
     await apiPost(`/api/inspections/${id}/clips`, { clip_id: idLocal, audio_url: aUrl, photos: photoPayload });

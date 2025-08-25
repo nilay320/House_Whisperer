@@ -10,73 +10,78 @@ House Whisperer is an AI-powered home inspection assistant that transforms audio
 ## High-Level Architecture
 
 ```mermaid
-graph TB
+graph LR
     subgraph "Frontend Layer"
-        Mobile[📱 Mobile App<br/>React PWA]
-        Inspector[👤 Inspector<br/>Interface]
+        Inspector[Inspector Interface]
+        Mobile[Mobile App - React PWA]
+        Inspector --> Mobile
     end
-    
+
     subgraph "API Gateway"
-        FastAPI[⚡ FastAPI<br/>Async Server]
+        FastAPI[FastAPI - Async]
     end
-    
+
     subgraph "Core AI Systems"
-        subgraph "Report Generation"
-            LangGraph[🔄 LangGraph<br/>Orchestration]
-            Subgraph[📊 Nested Subgraphs<br/>w/ Quality Loops]
+        subgraph "Report Generation - Open Deep Research style"
+            Supervisor[Supervisor]
+            Fanout[Section Subgraphs - parallel]
+            RetrieveRank[Retrieve and Rerank]
+            Generate[Generate]
+            Grade[Grade and Decide]
+            Supervisor --> Fanout --> RetrieveRank --> Generate --> Grade
+            Grade -- "Fail &lt; threshold" --> RetrieveRank
         end
-        
+
         subgraph "Knowledge Systems"
-            RAG[📚 Inspector RAG<br/>Code Compliance]
-            Narratives[🎯 Narrative DB<br/>10k+ Examples]
+            InspectorRAG[Inspector RAG - Code Compliance]
+            Narratives[Narratives Qdrant Collection - 7k narratives]
         end
     end
-    
+
     subgraph "AI Models"
-        Whisper[🎤 Whisper<br/>Transcription]
-        GPT4[🧠 GPT-4<br/>Generation]
-        Cohere[🔍 Cohere<br/>Reranking]
-        Embeddings[📐 OpenAI<br/>Embeddings]
+        Whisper[Whisper - Transcription]
+        GPT4[GPT-4 - Generation]
+        Cohere[Cohere - Reranking]
+        Embeddings[OpenAI Embeddings]
     end
-    
+
     subgraph "Data Layer"
-        Firebase[🔥 Firestore<br/>Inspection Data]
-        Qdrant[⚡ Qdrant<br/>Vector DB]
-        Storage[☁️ Cloud Storage<br/>Audio/Reports]
+        Firebase[Firestore - Inspection Data]
+        Qdrant[Qdrant - Vector DB]
+        Storage[Cloud Storage - Audio and Reports]
     end
-    
+
     subgraph "External Services"
-        Tavily[🌐 Tavily<br/>Web Search]
-        CPSC[⚠️ CPSC<br/>Recalls]
+        Tavily[Tavily - Web Search]
+        CPSC[CPSC - Recalls]
     end
-    
-    Inspector --> Mobile
+
     Mobile --> FastAPI
-    
-    FastAPI --> LangGraph
-    FastAPI -.->|Direct Query| RAG
-    
-    LangGraph --> Subgraph
-    Subgraph --> RAG
-    Subgraph --> Narratives
-    
-    RAG --> Qdrant
-    Narratives --> Cohere
-    
-    Subgraph --> GPT4
-    Subgraph --> Whisper
-    
+    FastAPI --> Supervisor
+    FastAPI -.->|Direct Query| InspectorRAG
+
+    RetrieveRank --> Narratives
+    RetrieveRank --> Cohere
+    Generate --> InspectorRAG
+
+    Fanout --> Whisper
+    Generate --> GPT4
+
     FastAPI --> Firebase
     Firebase --> Storage
-    
-    RAG --> Tavily
-    Tavily --> CPSC
-    
+
+    InspectorRAG --> Qdrant
     Qdrant --> Embeddings
-    
-    style LangGraph fill:#ffecb3
-    style Subgraph fill:#e1f5fe
-    style RAG fill:#f3e5f5
+
+    InspectorRAG --> Tavily
+    Tavily --> CPSC
+
+    style Supervisor fill:#fff7ed,stroke:#f59e0b
+    style Fanout fill:#f0fdf4,stroke:#22c55e
+    style RetrieveRank fill:#eef2ff,stroke:#6366f1
+    style Generate fill:#ecfeff,stroke:#06b6d4
+    style Grade fill:#fef9c3,stroke:#eab308
+    style Narratives fill:#f3e5f5
     style GPT4 fill:#e8f5e9
     style Cohere fill:#fff3e0
 ```

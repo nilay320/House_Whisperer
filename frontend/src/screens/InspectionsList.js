@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Trash2 } from 'lucide-react';
-import { db } from '../services/firebase';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { db, auth } from '../services/firebase';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { apiDelete } from '../services/api';
 
 export default function InspectionsList({ user }) {
@@ -12,7 +12,12 @@ export default function InspectionsList({ user }) {
 
   useEffect(() => {
     if (!user) return; // do not subscribe if not authed
-    const qRef = query(collection(db, 'inspections'), orderBy('createdAt', 'desc'));
+    // Filter inspections to only show those owned by the current user
+    const qRef = query(
+      collection(db, 'inspections'), 
+      where('ownerUid', '==', auth.currentUser?.uid || user.uid),
+      orderBy('createdAt', 'desc')
+    );
     const unsub = onSnapshot(qRef, (snap) => {
       const rows = [];
       snap.forEach((d) => {

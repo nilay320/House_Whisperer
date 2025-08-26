@@ -190,20 +190,34 @@ def search_qdrant_narratives(section_key: str, clips: List[Dict],
         narratives = []
         for r in results:
             # Get narrative text - it's stored as 'comment_text' in the payload
-            narrative_text = r['payload'].get('comment_text', '')
+            payload = r.get('payload', {}) or {}
+            narrative_text = payload.get('comment_text', '')
             # Build full narrative from comment_name + comment_text if available
-            comment_name = r['payload'].get('comment_name', '')
+            comment_name = payload.get('comment_name', '')
             if comment_name and narrative_text:
                 full_narrative = f"{comment_name}: {narrative_text}"
             else:
                 full_narrative = narrative_text or comment_name or ''
             
+            # Map Qdrant payload metadata to severity (align with enhanced writer)
+            comment_type = payload.get('comment_type', 'info')
+            severity = 'info'
+            if comment_type == 'defect':
+                category = payload.get('category', 0)
+                if category == 1:
+                    severity = 'critical'
+                elif category == 0:
+                    severity = 'major'
+                else:
+                    severity = 'minor'
+
             narrative_data = {
                 'narrative': full_narrative,
                 'score': r.get('score', 0),
                 'embedding_score': r.get('score', 0),  # Keep original
-                'section': r['payload'].get('section', section_key),
-                'id': r.get('id', '')
+                'section': payload.get('section', section_key),
+                'id': r.get('id', ''),
+                'severity': severity,
             }
             narratives.append(narrative_data)
         
@@ -701,13 +715,29 @@ def grade_and_decide(state: SectionState) -> Command[Literal[END, "retrieve_and_
         logger.info(f"✅ [{section_key}] ACCEPTED - Score: {quality_score:.2f}, Iterations: {iteration + 1}, Source: {source}")
         
         # Format final output
+        # Determine severity for the completed section
+        severity = 'info'
+        if state.get("ranked_narratives"):
+            top = state["ranked_narratives"][0] or {}
+            severity = top.get('severity', 'info')
+        elif narrative:
+            # Fallback heuristic when no payload-based severity exists
+            nl = narrative.lower()
+            if any(k in nl for k in ['immediate', 'danger', 'hazard', 'unsafe']):
+                severity = 'critical'
+            elif any(k in nl for k in ['repair', 'replace', 'damage', 'defect']):
+                severity = 'major'
+            elif any(k in nl for k in ['maintenance', 'monitor', 'wear']):
+                severity = 'minor'
+
         completed_section = {
             "section_key": section_key,
             "narrative": narrative,
             "source": source,
             "quality_score": quality_score,
             "iterations": iteration + 1,
-            "quality_feedback": feedback
+            "quality_feedback": feedback,
+            "severity": severity
         }
         
         return Command(
@@ -918,11 +948,21 @@ def compile_report(state: ReportState) -> Dict:
     report_parts.append("**Severity Legend:** 🔴 Critical • 🟠 Major • 🟡 Minor • ℹ️ Info/Normal")
     report_parts.append("")
     
+    # Helper for severity badge
+    def _severity_badge(s: str) -> str:
+        badges = {
+            'critical': '🔴',
+            'major': '🟠',
+            'minor': '🟡',
+            'info': 'ℹ️',
+        }
+        return badges.get((s or 'info').lower(), 'ℹ️')
+
     # List sections in TOC with severity badges as bullet points
     for section in sections_sorted:
         section_title = section['section_key'].replace('_', ' ').title()
-        # All sections are info level for now (no critical/major/minor detection implemented)
-        report_parts.append(f"- ℹ️ {section_title}")
+        badge = _severity_badge(section.get('severity', 'info'))
+        report_parts.append(f"- {badge} {section_title}")
     report_parts.append("")
     
     # Add data sources legend
@@ -991,9 +1031,16 @@ def compile_report(state: ReportState) -> Dict:
             source_emoji = "⚪"
             source_label = "Summary"
         
-        # Section header with color coding
+        # Section header with color coding and severity badge
         report_parts.append(f"\n## {section_title}")
-        report_parts.append(f"ℹ️ Info • {source_emoji} **{source_label}** ({quality_score:.0%})")
+        badge = _severity_badge(section.get('severity', 'info'))
+        label = {
+            '🔴': 'Critical',
+            '🟠': 'Major',
+            '🟡': 'Minor',
+            'ℹ️': 'Info'
+        }.get(badge, 'Info')
+        report_parts.append(f"{badge} {label} • {source_emoji} **{source_label}** ({quality_score:.0%})")
         report_parts.append("")
         report_parts.append(narrative)
     

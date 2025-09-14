@@ -486,19 +486,37 @@ def node_generate_section_narrative(state: SectionState) -> SectionState:
     else:
         final_narrative = "No relevant information found."
     
-    # Determine severity
-    severity = "Info"
-    severity_keywords = {
-        'Critical': ['immediate', 'danger', 'hazard', 'unsafe'],
-        'Major': ['repair', 'replace', 'damage', 'defect'],
-        'Minor': ['maintenance', 'monitor', 'wear']
-    }
-    
-    narrative_lower = final_narrative.lower()
-    for level, keywords in severity_keywords.items():
-        if any(k in narrative_lower for k in keywords):
-            severity = level
-            break
+    # Determine severity (prefer payload when available, else keyword heuristic)
+    severity = "info"
+    # Try payload-based severity from top narrative
+    top_meta = {}
+    if narratives and isinstance(narratives[0], dict):
+        top_meta = narratives[0].get('metadata', {}) or {}
+    ctype = (top_meta.get('comment_type') or '').lower()
+    if ctype == 'defect':
+        cat_raw = top_meta.get('category', 0)
+        try:
+            cat = int(cat_raw)
+        except Exception:
+            cat = 0
+        if cat == 1:
+            severity = 'critical'
+        elif cat == 0:
+            severity = 'major'
+        else:
+            severity = 'minor'
+    else:
+        # Fallback heuristic
+        severity_keywords = {
+            'critical': ['immediate', 'danger', 'hazard', 'unsafe'],
+            'major': ['repair', 'replace', 'damage', 'defect'],
+            'minor': ['maintenance', 'monitor', 'wear']
+        }
+        narrative_lower = final_narrative.lower()
+        for level, keywords in severity_keywords.items():
+            if any(k in narrative_lower for k in keywords):
+                severity = level
+                break
     
     return {
         'completed_section': {

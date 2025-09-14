@@ -203,7 +203,12 @@ def search_qdrant_narratives(section_key: str, clips: List[Dict],
             comment_type = payload.get('comment_type', 'info')
             severity = 'info'
             if comment_type == 'defect':
-                category = payload.get('category', 0)
+                # Category can be string ("-1", "0", "1"); cast safely to int
+                cat_raw = payload.get('category', 0)
+                try:
+                    category = int(cat_raw)
+                except Exception:
+                    category = 0
                 if category == 1:
                     severity = 'critical'
                 elif category == 0:

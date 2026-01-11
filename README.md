@@ -423,3 +423,4 @@ Notes:
 - Persistent data: Firestore (inspections, clips, transcripts), Firebase Storage (media).
 - Report writer (Option B2): structured outline → per‑section LLM summary (gpt‑4o‑mini) → observations (transcript first sentence + suggested narratives + photos) → Markdown draft stored under `inspections/{id}/reports/draft`.
 - Narratives: indexed to Qdrant; queries filter by `payload.section == clip.section` and rank by similarity to the transcript.
+

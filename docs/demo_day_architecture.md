@@ -16,11 +16,11 @@ graph LR
         Mobile[Mobile App - React PWA]
         Inspector --> Mobile
     end
-
+    
     subgraph "API Gateway"
         FastAPI[FastAPI - Async]
     end
-
+    
     subgraph "Core AI Systems"
         subgraph "Report Generation - Open Deep Research style"
             Supervisor[Supervisor]
@@ -31,31 +31,31 @@ graph LR
             Supervisor --> Fanout --> RetrieveRank --> Generate --> Grade
             Grade -- "Fail &lt; threshold" --> RetrieveRank
         end
-
+        
         subgraph "Knowledge Systems"
             InspectorRAG[Inspector RAG - Code Compliance]
             Narratives[Narratives Qdrant Collection - 7k narratives]
         end
     end
-
+    
     subgraph "AI Models"
         Whisper[Whisper - Transcription]
         GPT4[GPT-4 - Generation]
         Cohere[Cohere - Reranking]
         Embeddings[OpenAI Embeddings]
     end
-
+    
     subgraph "Data Layer"
         Firebase[Firestore - Inspection Data]
         Qdrant[Qdrant - Vector DB]
         Storage[Cloud Storage - Audio and Reports]
     end
-
+    
     subgraph "External Services"
         Tavily[Tavily - Web Search]
         CPSC[CPSC - Recalls]
     end
-
+    
     Mobile --> FastAPI
     FastAPI --> Supervisor
     FastAPI -.->|Direct Query| InspectorRAG
@@ -66,13 +66,13 @@ graph LR
 
     Fanout --> Whisper
     Generate --> GPT4
-
+    
     FastAPI --> Firebase
     Firebase --> Storage
-
+    
     InspectorRAG --> Qdrant
     Qdrant --> Embeddings
-
+    
     InspectorRAG --> Tavily
     Tavily --> CPSC
 

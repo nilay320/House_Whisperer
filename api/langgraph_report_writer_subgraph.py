@@ -215,7 +215,7 @@ def search_qdrant_narratives(section_key: str, clips: List[Dict],
                     severity = 'major'
                 else:
                     severity = 'minor'
-
+            
             narrative_data = {
                 'narrative': full_narrative,
                 'score': r.get('score', 0),
@@ -962,7 +962,7 @@ def compile_report(state: ReportState) -> Dict:
             'info': 'ℹ️',
         }
         return badges.get((s or 'info').lower(), 'ℹ️')
-
+    
     # List sections in TOC with severity badges as bullet points
     for section in sections_sorted:
         section_title = section['section_key'].replace('_', ' ').title()

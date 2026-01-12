@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm
+FROM python:3.10-slim-bookworm
 
 # WeasyPrint native deps (Cairo/Pango/Harfbuzz/Fribidi/GDK-Pixbuf/GLib) + fonts
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

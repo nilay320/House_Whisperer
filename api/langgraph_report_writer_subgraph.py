@@ -1048,6 +1048,39 @@ def compile_report(state: ReportState) -> Dict:
         report_parts.append(f"{badge} {label} • {source_emoji} **{source_label}** ({quality_score:.0%})")
         report_parts.append("")
         report_parts.append(narrative)
+        
+        # Include photos associated with this section's clips (if any)
+        try:
+            clips_by_section = state.get("clips_by_section", {}) or {}
+            section_clips = clips_by_section.get(section_key, []) or []
+            
+            photos_to_render = []
+            def _photo_caption(photo_dict: Dict[str, Any]) -> str:
+                """Caption source: use only 'user_caption' to match current data."""
+                return str(photo_dict.get("user_caption") or "").strip()
+            
+            for c in section_clips:
+                for ph in (c.get("photos") or []):
+                    url = ph.get("url")
+                    if url:
+                        # Prefer explicit user caption, then other common fields, else empty
+                        cap = _photo_caption(ph)
+                        photos_to_render.append((url, cap))
+            
+            if photos_to_render:
+                report_parts.append("")
+                report_parts.append("### Photos")
+                for url, cap in photos_to_render:
+                    if cap:
+                        # Show caption text visibly, then the image
+                        report_parts.append(f"- **{cap}**")
+                        report_parts.append(f"  ")
+                        report_parts.append(f"  ![Photo]({url})")
+                    else:
+                        report_parts.append(f"- ![Photo]({url})")
+        except Exception:
+            # Photo rendering is best-effort; do not fail report generation
+            pass
     
     final_report = "\n".join(report_parts)
     

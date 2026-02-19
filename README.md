@@ -76,10 +76,14 @@ QDRANT_API_KEY=your-qdrant-key
 TAVILY_API_KEY=your-tavily-key
 EOF
 
-# Run the API server
-python app.py
+# Run the API server (recommended via uvicorn)
+# From repo root:
+uvicorn api.app:app --reload --port 8000
+# Or from the api folder:
+# uvicorn app:app --reload --port 8000
 # API will be available at http://localhost:8000
 ```
+Note: Launching with uvicorn ensures the app module is loaded as `app` (not `__main__`), which avoids duplicate-module issues and guarantees the subgraph can access the initialized Firebase Admin client.
 
 ### 3. Frontend Setup (in new terminal)
 ```bash
